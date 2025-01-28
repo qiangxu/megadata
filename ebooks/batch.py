@@ -5,27 +5,28 @@
 import os
 from pathlib import Path
 import shutil
+import glob
 
-def rename_pdfs(src_dir='mountsmb/batch_1', dst_dir="batch_1b"):
-    counter = 1
-    for root, _, files in os.walk(src_dir):
-        for file in sorted(files):
-            if file.lower().endswith('.pdf'):
-                if counter > 6725: 
-                    try:
-                        counter_set = int((counter // 500 + 1) * 500)
-                        file_path = Path(root) / file
-                        print(counter, file)
-                        
-                        # Create new filename with zero-padded counter
-                        new_filename = f"{dst_dir}/{counter_set}/{counter:05d}_{file}"
-                        new_file_path = Path(".") / new_filename 
-                        Path(f"{dst_dir}/{counter_set}").mkdir(parents=True, exist_ok=True) 
-                        # Copy the file with new name
-                        shutil.copy2(file_path, new_file_path)
-                    except Exception as e: 
-                        breakpoint()
-                counter += 1
+def rename_pdfs(src_dir='/Users/qiangxu/Downloads/batch_2', dst_dir="../../batch_2b"):
+    counter = 2357
+    for file in sorted(glob.glob(f"{src_dir}/**/*.pdf", recursive=True)):
+        if file.lower().endswith('.pdf'):
+            try:
+                counter_set = int((counter // 500 + 1) * 500)
+                file_path = Path(file)
+                print(counter, file)
+                
+                # Create new filename with zero-padded counter
+                file_basename = os.path.basename(file)
+                new_filename = f"{dst_dir}/{counter_set:05d}/{counter:05d}_{file_basename}"
+                new_file_path = Path(".") / new_filename 
+                Path(f"{dst_dir}/{counter_set:05d}").mkdir(parents=True, exist_ok=True) 
+                # Copy the file with new name
+                shutil.copy2(file_path, new_file_path)
+            except Exception as e: 
+                breakpoint()
+                pass
+            counter += 1
 
 # Run the function
 rename_pdfs()
