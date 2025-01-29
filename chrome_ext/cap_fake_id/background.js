@@ -4,7 +4,7 @@
 */
 
 // background.js
-let urlPattern = '.*'; // 默认匹配所有URL
+let urlPattern = 'https://mp.weixin.qq.com/cgi-bin/appmsgpublish'; // 默认匹配所有URL
 let capturedUrls = [];
 
 // 监听URL请求
@@ -39,14 +39,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.storage.local.set({ 'urlPattern': urlPattern });
     sendResponse({ success: true });
   } else if (request.action === 'exportUrls') {
-    const blob = new Blob([JSON.stringify(capturedUrls, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `cap_fake_id_${timestamp}.json`;
+
+	let filecontent = ''
+
+	capturedUrls.forEach(u => {
+      filecontent += `${u.url}\n`;
+    });	
+	const encodedUri = 'data:text/csv;charset=utf-8,\ufeff' + encodeURIComponent(filecontent);
     chrome.downloads.download({
-      url: url,
-      filename: 'captured_urls.json'
+      url: encodedUri,
+      filename: filename,
     });
-    
+
     sendResponse({ success: true });
   }
 });

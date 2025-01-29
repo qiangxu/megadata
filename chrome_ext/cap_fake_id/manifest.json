@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "URL Monitor",
+  "name": "cap fake id",
   "version": "1.0",
-  "description": "Monitor and save URLs matching specific patterns",
+  "description": "MONITOR AND SAVE URLS MATCHING SPECIFIC PATTERNS",
   "permissions": [
     "storage",
     "webRequest",

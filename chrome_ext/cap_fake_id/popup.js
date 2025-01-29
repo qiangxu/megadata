@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
       action: 'setPattern', 
       pattern: pattern 
     }, () => {
-      alert('URL pattern已更新');
+      alert('URL PATTERN已更新');
     });
   });
 
