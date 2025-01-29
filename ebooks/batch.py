@@ -7,8 +7,8 @@ from pathlib import Path
 import shutil
 import glob
 
-def rename_pdfs(src_dir='/Users/qiangxu/Downloads/batch_2', dst_dir="../../batch_2b"):
-    counter = 2357
+def rename_pdfs(src_dir='/Users/qiangxu/Downloads/batch_2/007*/', dst_dir="../../batch_2b"):
+    counter = 5534
     for file in sorted(glob.glob(f"{src_dir}/**/*.pdf", recursive=True)):
         if file.lower().endswith('.pdf'):
             try:
