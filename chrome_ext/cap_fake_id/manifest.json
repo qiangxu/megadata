@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "URL Monitor",
+  "version": "1.0",
+  "description": "Monitor and save URLs matching specific patterns",
+  "permissions": [
+    "storage",
+    "webRequest",
+    "activeTab",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

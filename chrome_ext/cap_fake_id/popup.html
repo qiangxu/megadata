@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+* CREATED DATE: Wed Jan 29 15:24:55 2025
+* CREATED BY: qiangxu, toxuqiang@gmail.com
+-->
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 10px;
+    }
+    #urlList {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .url-item {
+      margin: 5px 0;
+      word-break: break-all;
+    }
+    .controls {
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <input type="text" id="patternInput" placeholder="输入URL匹配模式 (正则表达式)">
+    <button id="setPattern">设置</button>
+  </div>
+  <div class="controls">
+    <button id="exportBtn">导出JSON</button>
+    <button id="clearBtn">清除记录</button>
+  </div>
+  <div id="urlList"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
+
+
