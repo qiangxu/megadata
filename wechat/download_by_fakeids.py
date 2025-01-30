@@ -36,7 +36,7 @@ def extract_text_from_html(html):
 def crawl_account(fakeid): 
     fakeid=fakeid.strip().strip('==')
     if os.path.exists(f"./{fakeid}"): 
-        page = (len(os.listdir(f"./{fakeid}")) // 20)
+        page = (len(os.listdir(f"./{fakeid}")) // 50)
         counter = len(os.listdir(f"./{fakeid}"))
     else:
         page = 0
@@ -47,8 +47,8 @@ def crawl_account(fakeid):
     while True:
         url = (
             "https://mp.weixin.qq.com/cgi-bin/appmsgpublish?sub=list&search_field=null&begin="
-            + str(page * 20)
-            + f"&count=20&query=&fakeid={fakeid}%3D%3D&type=101_1&free_publish_type=1&sub_action=list_ex&token={TOKEN}&lang=zh_CN&f=json&ajax=1"
+            + str(page * 50)
+            + f"&count=50&query=&fakeid={fakeid}%3D%3D&type=101_1&free_publish_type=1&sub_action=list_ex&token={TOKEN}&lang=zh_CN&f=json&ajax=1"
         )
         res = requests.get(url, headers=headers).text
         # print(res)
@@ -56,21 +56,24 @@ def crawl_account(fakeid):
             break
         titles = re.findall('"link":"(.*?)","', res.replace("\\", ""))
         
-        if len(titles) <= counter - page * 20:
+        if len(titles) <= counter - page * 50:
             pass
         else:  
-            for title in tqdm(titles[counter - page * 20:]):
+            for title in tqdm(titles[counter - page * 50:]):
                 try:
                     title_id =  os.path.basename(title)
-                    with open(f"./{fakeid}/{counter:04d}-{title_id}.txt", "w") as f: 
-                        # print(title)
-                        content = requests.get(title, headers=headers).text
-                        content_1 = "".join(content.splitlines()).replace("\t", "").replace(" ", "")
-                        wb = extract_text_from_html(content_1).replace("\t", "").replace(" ", "")
-                        # print(wb)
-                        f.write(wb + "\n")
-                        f.flush()
-                        # time.sleep(random.randint(1, 2) / 5)
+                    if len(title_id) < 30:
+                        with open(f"./{fakeid}/{counter:04d}-{title_id}.txt", "w") as f: 
+                            # print(title)
+                            content = requests.get(title, headers=headers).text
+                            content_1 = "".join(content.splitlines()).replace("\t", "").replace(" ", "")
+                            wb = extract_text_from_html(content_1).replace("\t", "").replace(" ", "")
+                            # print(wb)
+                            f.write(wb + "\n")
+                            f.flush()
+                            # time.sleep(random.randint(1, 2) / 5)
+                    else:
+                        pass
                 except Exception as e: 
                     print("EXCEPTION: ", e)
                     time.sleep(10)
