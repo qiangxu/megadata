@@ -4,6 +4,7 @@ import time
 import random
 import re
 import os
+import json
 from tqdm import tqdm
 from pathlib import Path
 
@@ -32,11 +33,47 @@ def extract_text_from_html(html):
             text += match[2] + " "
     return text
 
+def get_posts(fakeid):
+    fakeid=fakeid.strip().strip('==')
+    if os.path.exists(f"./metadata/{fakeid}.json"):
+        return 
+
+    page = 0
+    print("FAKEID: ", fakeid)
+    res = {}
+    total_count = 10000
+    with tqdm(
+        total=total_count
+    ) as pbar:
+
+        while len(res) < total_count:
+            url = (
+                "https://mp.weixin.qq.com/cgi-bin/appmsgpublish?sub=list&search_field=null&begin="
+                + str(page * 20)
+                + f"&count=20&query=&fakeid={fakeid}%3D%3D&type=101_1&free_publish_type=1&sub_action=list_ex&token={TOKEN}&lang=zh_CN&f=json&ajax=1"
+            )
+            response = requests.get(url, headers=headers).text
+            total_count = json.loads(json.loads(response)['publish_page'])['total_count']
+            posts = json.loads(json.loads(response)['publish_page'])['publish_list']
+
+            for p in posts:
+                if len(p['publish_info']) > 10:
+                    p = json.loads(p['publish_info'])
+                    post_id = p['appmsgex'][0]['appmsgid'] 
+                    res[post_id] = p
+            page += 1
+            time.sleep(random.randint(1, 10) / 10) 
+            pbar.update(20 * 10000 / total_count )
+
+    with open(f"./metadata/{fakeid}.json", 'w', encoding='utf-8') as f:
+        for p_id, p in res.items():
+            f.write(json.dumps(p))
+            f.write("\n")
 
 def crawl_account(fakeid): 
     fakeid=fakeid.strip().strip('==')
     if os.path.exists(f"./{fakeid}"): 
-        page = (len(os.listdir(f"./{fakeid}")) // 50)
+        page = (len(os.listdir(f"./{fakeid}")) // 20)
         counter = len(os.listdir(f"./{fakeid}"))
     else:
         page = 0
@@ -47,45 +84,54 @@ def crawl_account(fakeid):
     while True:
         url = (
             "https://mp.weixin.qq.com/cgi-bin/appmsgpublish?sub=list&search_field=null&begin="
-            + str(page * 50)
-            + f"&count=50&query=&fakeid={fakeid}%3D%3D&type=101_1&free_publish_type=1&sub_action=list_ex&token={TOKEN}&lang=zh_CN&f=json&ajax=1"
+            + str(page * 20)
+            + f"&count=20&query=&fakeid={fakeid}%3D%3D&type=101_1&free_publish_type=1&sub_action=list_ex&token={TOKEN}&lang=zh_CN&f=json&ajax=1"
         )
         res = requests.get(url, headers=headers).text
         # print(res)
         if "link" not in res:
             break
-        titles = re.findall('"link":"(.*?)","', res.replace("\\", ""))
+        breakpoint()
+        posts = json.loads(json.loads(res)['publish_page'])['publish_list']
+        posts = [json.loads(p['publish_info']) for p in posts if len(p['publish_info']) > 10]
+
         
-        if len(titles) <= counter - page * 50:
-            pass
-        else:  
-            for title in tqdm(titles[counter - page * 50:]):
-                try:
-                    title_id =  os.path.basename(title)
-                    if len(title_id) < 30:
-                        with open(f"./{fakeid}/{counter:04d}-{title_id}.txt", "w") as f: 
-                            # print(title)
-                            content = requests.get(title, headers=headers).text
-                            content_1 = "".join(content.splitlines()).replace("\t", "").replace(" ", "")
-                            wb = extract_text_from_html(content_1).replace("\t", "").replace(" ", "")
-                            # print(wb)
-                            f.write(wb + "\n")
-                            f.flush()
-                            # time.sleep(random.randint(1, 2) / 5)
-                    else:
-                        pass
-                except Exception as e: 
-                    print("EXCEPTION: ", e)
-                    time.sleep(10)
-                    return 
-                counter += 1
+        #TODO: WRITE POSTS TO FILE
+        
+        for post in tqdm(posts):
+            try:
+                post_id = post['appmsgex'][0]['appmsgid']
+                if glob.glob(f"{fakeid}/{post_id}*.txt"):
+                    pass
+                else: 
+                    title_id =  os.path.basename(post['appmsgex'])
+                    with open(f"./{fakeid}/{counter:04d}-{title_id}.txt", "w") as f: 
+                        # print(title)
+                        content = requests.get(title, headers=headers).text
+                        content_1 = "".join(content.splitlines()).replace("\t", "").replace(" ", "")
+                        wb = extract_text_from_html(content_1).replace("\t", "").replace(" ", "")
+                        # print(wb)
+                        f.write(wb + "\n")
+                        f.flush()
+                        # time.sleep(random.randint(1, 2) / 5)
+            except Exception as e: 
+                print("EXCEPTION: ", e)
+                time.sleep(30)
+                return 
+            counter += 1
         print("\n")
         page += 1
-        time.sleep(10)
+        time.sleep(3)
 
 
 with open("fakeids.csv", 'r', encoding='utf-8') as f:
     fakeids = f.readlines()
 
-for fakeid in fakeids: 
-    crawl_account(fakeid)
+for fakeid in tqdm(fakeids): 
+    try:
+        get_posts(fakeid)
+        time.sleep(30)
+    except Exception as e: 
+        breakpoint()
+        pass
+    #crawl_account(fakeid)
