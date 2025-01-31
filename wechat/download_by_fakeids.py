@@ -190,13 +190,15 @@ def search_accounts(token=TOKEN, cookie=COOKIE):
 		"假肢矫形工程": ["人体工程", "康复器具", "生物力学", "矫形技术", "功能仿生"],
 	}
     count = 10
-    page = 2
+    page = 10
     
     query_words = []
     for query_key in query_bag.keys():
         query_words.extend(query_bag[query_key])
 
-    for query in tqdm(query_words[61:]):
+    query_words = ["学术", "百科", "教育", "科技"]
+
+    for query in tqdm(query_words):
 		
         for page_no in range(page): 
             begin = page_no * count 
@@ -305,7 +307,6 @@ def main():
     # 解析命令行参数
     args = parser.parse_args()
     
-    """
     with open("fakeids.csv", "r", encoding="utf-8") as f:
         fakeids = f.readlines()
     """
@@ -313,6 +314,7 @@ def main():
         accounts = [json.loads(l) for l in f.readlines()]
 
     fakeids = list(set([a['fakeid'] for a in accounts]))
+    """
 
     if args.config:
         # 读取配置文件
@@ -324,7 +326,8 @@ def main():
         cookie = COOKIE
         token = TOKEN
 
-    # search_accounts(token=token, cookie=cookie)
+    #search_accounts(token=token, cookie=cookie)
+    #return
     for fakeid in tqdm(fakeids):
         try:
             # get_posts(fakeid, token=token, cookie=cookie)
