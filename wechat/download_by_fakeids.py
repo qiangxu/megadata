@@ -307,6 +307,7 @@ def main():
     # 解析命令行参数
     args = parser.parse_args()
     
+    """
     with open("fakeids.csv", "r", encoding="utf-8") as f:
         fakeids = f.readlines()
     """
@@ -314,8 +315,6 @@ def main():
         accounts = [json.loads(l) for l in f.readlines()]
 
     fakeids = list(set([a['fakeid'] for a in accounts]))
-    """
-
     if args.config:
         # 读取配置文件
         config = read_config(args.config)
