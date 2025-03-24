@@ -29,7 +29,7 @@ def extract_text_from_html(html):
 
 def get_posts(fakeid, token=TOKEN, cookie=COOKIE):
     fakeid = fakeid.strip().strip("==")
-    if os.path.exists(f"./metadata/{fakeid}.json"):
+    if os.path.exists(f"./data/lists/{fakeid}.json"):
         return
 
     page = 0
@@ -59,7 +59,7 @@ def get_posts(fakeid, token=TOKEN, cookie=COOKIE):
             if len(posts) == 0:
                 break
 
-            with open(f"./metadata/{fakeid}.json", "a+", encoding="utf-8") as f:
+            with open(f"./data/lists/{fakeid}.json", "a+", encoding="utf-8") as f:
                 for p in posts:
                     if len(p["publish_info"]) > 10:
                         p = json.loads(p["publish_info"])
@@ -227,12 +227,17 @@ def crawl_account(fakeid, token=TOKEN, cookie=COOKIE):
     # breakpoint()
     fakeid = fakeid.strip().strip("==")
     print("FAKEID: ", fakeid)
-    Path(f"./{fakeid}").mkdir(parents=True, exist_ok=True)
+    Path(f"./data/posts/{fakeid}").mkdir(parents=True, exist_ok=True)
 
-    if not glob.glob(f"./metadata/{fakeid}.json"):
+    if not glob.glob(f"./data/lists/{fakeid}.json"):
         get_posts(fakeid, token=token, cookie=cookie)
 
-    with open(f"./metadata/{fakeid}.json", "r", encoding="utf-8") as f:
+    if not glob.glob(f"./data/lists/{fakeid}.json"):
+        print(f"NO: ./data/lists/{fakeid}.json")
+        print(f"FAKEID: {fakeid} IS SKIPPED")
+        return 
+
+    with open(f"./data/lists/{fakeid}.json", "r", encoding="utf-8") as f:
         posts = f.readlines()
 
     posts = [json.loads(p) for p in posts]
@@ -246,16 +251,23 @@ def crawl_account(fakeid, token=TOKEN, cookie=COOKIE):
             continue
 
         suffix = str(post_id)[-2:]
-        if glob.glob(f"{fakeid}/{suffix}/{post_id}*.txt"):
+        if glob.glob(f"./data/posts/{fakeid}/{suffix}/{post_id}.html"):
             continue
 
-        Path(f"./{fakeid}/{suffix}").mkdir(parents=True, exist_ok=True)
+        Path(f"./data/posts/{fakeid}/{suffix}").mkdir(parents=True, exist_ok=True)
         title = post["appmsgex"][0]["title"]
 
         link = post["appmsgex"][0]["link"]
         count += 1
-        with open(f"./{fakeid}/{suffix}/{post_id}.txt", "w") as f:
-            print(post_id, title)
+        with open(f"./data/posts/{fakeid}/{suffix}/{post_id}.html", "w") as f:
+            print(f"./data/posts/{fakeid}/{suffix}/{post_id}.html")
+            content = requests.get(
+                        link,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36",
+                        },
+                    ).text
+            """
             content = (
                 "".join(
                     requests.get(
@@ -269,9 +281,10 @@ def crawl_account(fakeid, token=TOKEN, cookie=COOKIE):
                 .replace("\t", "")
                 .replace(" ", "")
             )
-            wb = extract_text_from_html(content).replace("\t", "").replace(" ", "")
-            f.write(wb + "\n")
-        time.sleep(random.randint(1, 10) / 10)
+            """
+            #wb = extract_text_from_html(content).replace("\t", "").replace(" ", "")
+            f.write(content + "\n")
+        time.sleep(random.randint(20, 50) / 10)
     print(f"FAKEID: {fakeid} IS COMPLETED W/ {count} UPDATES")
     
     return count 
@@ -311,7 +324,7 @@ def main():
     with open("fakeids.csv", "r", encoding="utf-8") as f:
         fakeids = f.readlines()
     """
-    with open("accounts.json", 'r', encoding='utf-8') as f:
+    with open("data/accounts/accounts.json", 'r', encoding='utf-8') as f:
         accounts = [json.loads(l) for l in f.readlines()]
 
     fakeids = list(set([a['fakeid'] for a in accounts]))
