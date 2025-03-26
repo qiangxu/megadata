@@ -1,0 +1,402 @@
+[
+  {
+    "accountId": "MedSci_cn",
+    "displayName": "梅斯医学"
+  },
+  {
+    "accountId": "cas-iop",
+    "displayName": "中科院物理所"
+  },
+  {
+    "accountId": "gh_5b2688567a3d",
+    "displayName": "法眼帝国"
+  },
+  {
+    "accountId": "gaoxiaoxuebao",
+    "displayName": "双一流高教"
+  },
+  {
+    "accountId": "mugexueshu",
+    "displayName": "募格学术"
+  },
+  {
+    "accountId": "keyanquan",
+    "displayName": "环球科学科研圈"
+  },
+  {
+    "accountId": "zxqycxcy",
+    "displayName": "中小企业服务机构联合会"
+  },
+  {
+    "accountId": "qlgd2013",
+    "displayName": "齐鲁工业大学 山东省科学院"
+  },
+  {
+    "accountId": "co188com",
+    "displayName": "土木在线"
+  },
+  {
+    "accountId": "The-Intellectual",
+    "displayName": "知识分子"
+  },
+  {
+    "accountId": "gh_481ee48e3261",
+    "displayName": "饶议科学"
+  },
+  {
+    "accountId": "med512",
+    "displayName": "护理传真"
+  },
+  {
+    "accountId": "zbfysz",
+    "displayName": "微仆2"
+  },
+  {
+    "accountId": "emuchnet",
+    "displayName": "小木虫"
+  },
+  {
+    "accountId": "baiduxueshu",
+    "displayName": "百度学术"
+  },
+  {
+    "accountId": "medlive",
+    "displayName": "医脉通"
+  },
+  {
+    "accountId": "gh_f2c6f2b54bc8",
+    "displayName": "全网益读"
+  },
+  {
+    "accountId": "geekheal_com",
+    "displayName": "奇点网"
+  },
+  {
+    "accountId": "xingshifaku",
+    "displayName": "刑事法库"
+  },
+  {
+    "accountId": "ShengWuXueBa",
+    "displayName": "生物学霸"
+  },
+  {
+    "accountId": "urban_evolution",
+    "displayName": "城市进化论"
+  },
+  {
+    "accountId": "faxueyanjiu-1",
+    "displayName": "法学研究"
+  },
+  {
+    "accountId": "GMPOFFICE",
+    "displayName": "GMP办公室"
+  },
+  {
+    "accountId": "Polymer-science",
+    "displayName": "高分子科学前沿"
+  },
+  {
+    "accountId": "Mat_science",
+    "displayName": "材料学网"
+  },
+  {
+    "accountId": "uSilkRoad",
+    "displayName": "战争研究"
+  },
+  {
+    "accountId": "openpage",
+    "displayName": "香港中和出版"
+  },
+  {
+    "accountId": "gh_95d5f280c103",
+    "displayName": "TsinghuaNLP"
+  },
+  {
+    "accountId": "JournalOfSemicond",
+    "displayName": "半导体学报"
+  },
+  {
+    "accountId": "design360magazine",
+    "displayName": "Design360"
+  },
+  {
+    "accountId": "med-research",
+    "displayName": "小狗科研"
+  },
+  {
+    "accountId": "cjshuili",
+    "displayName": "长江水利"
+  },
+  {
+    "accountId": "nature-portfolio",
+    "displayName": "自然系列"
+  },
+  {
+    "accountId": "shuili-jy",
+    "displayName": "水利家园"
+  },
+  {
+    "accountId": "kjzxnetcn",
+    "displayName": "科奖中心"
+  },
+  {
+    "accountId": "ljfy110",
+    "displayName": "最高裁判实务"
+  },
+  {
+    "accountId": "china_sci",
+    "displayName": "中国科学报"
+  },
+  {
+    "accountId": "zkyzswx",
+    "displayName": "中科院之声"
+  },
+  {
+    "accountId": "dingqianshufa",
+    "displayName": "丁谦书法艺术空间"
+  },
+  {
+    "accountId": "kejijiangli",
+    "displayName": "科奖在线"
+  },
+  {
+    "accountId": "renwenxueshu",
+    "displayName": "人大复印报刊资料 人文"
+  },
+  {
+    "accountId": "sciencenet-cas",
+    "displayName": "科学网"
+  },
+  {
+    "accountId": "FYYTZTJ",
+    "displayName": "风云药谈"
+  },
+  {
+    "accountId": "bio-art",
+    "displayName": "BioArt"
+  },
+  {
+    "accountId": "cssn_cn",
+    "displayName": "中国社会科学网"
+  },
+  {
+    "accountId": "NSFC-CSC",
+    "displayName": "国家自然科学基金委员会"
+  },
+  {
+    "accountId": "cykxx0421",
+    "displayName": "朝快消息"
+  },
+  {
+    "accountId": "kaoboquan100",
+    "displayName": "考博圈"
+  },
+  {
+    "accountId": "CCM_China",
+    "displayName": "重症医学"
+  },
+  {
+    "accountId": "oncology_news",
+    "displayName": "肿瘤资讯"
+  },
+  {
+    "accountId": "rationalscience",
+    "displayName": "研之成理"
+  },
+  {
+    "accountId": "rwzk01",
+    "displayName": "中外人物"
+  },
+  {
+    "accountId": "xueshuzhi001",
+    "displayName": "学术志"
+  },
+  {
+    "accountId": "gh_433ff313dad7",
+    "displayName": "汉唐倪师传承"
+  },
+  {
+    "accountId": "ACzixun",
+    "displayName": "学术会议资讯"
+  },
+  {
+    "accountId": "tongshanglaw",
+    "displayName": "通商律师事务所"
+  },
+  {
+    "accountId": "keyandajiang",
+    "displayName": "科研大匠"
+  },
+  {
+    "accountId": "hxgrants",
+    "displayName": "火行"
+  },
+  {
+    "accountId": "stemcell8",
+    "displayName": "干细胞"
+  },
+  {
+    "accountId": "LJFS110",
+    "displayName": "最高判例解读"
+  },
+  {
+    "accountId": "BIOONNEWS",
+    "displayName": "生物谷"
+  },
+  {
+    "accountId": "bioartplants",
+    "displayName": "BioArt植物"
+  },
+  {
+    "accountId": "gh_d784578364dc",
+    "displayName": "观医界"
+  },
+  {
+    "accountId": "medlive-oncology",
+    "displayName": "医脉通肿瘤科"
+  },
+  {
+    "accountId": "gh_98afa9b6ced0",
+    "displayName": "警之行政诉讼"
+  },
+  {
+    "accountId": "dxy_heart_today",
+    "displayName": "丁香园心血管时间"
+  },
+  {
+    "accountId": "econometrics666",
+    "displayName": "计量经济圈"
+  },
+  {
+    "accountId": "sunbushu123",
+    "displayName": "城市战争"
+  },
+  {
+    "accountId": "myyjzl",
+    "displayName": "名人演讲专栏"
+  },
+  {
+    "accountId": "Academic_Information",
+    "displayName": "科研城邦"
+  },
+  {
+    "accountId": "ibioworld",
+    "displayName": "生物世界"
+  },
+  {
+    "accountId": "Political_youth",
+    "displayName": "马克思主义研究动态"
+  },
+  {
+    "accountId": "freescience",
+    "displayName": "弗雷赛斯"
+  },
+  {
+    "accountId": "shuobo100",
+    "displayName": "硕士博士俱乐部"
+  },
+  {
+    "accountId": "jlzxsd",
+    "displayName": "计量资讯速递"
+  },
+  {
+    "accountId": "chenrujialinyihao",
+    "displayName": "西柚护士"
+  },
+  {
+    "accountId": "bj_xwyxz",
+    "displayName": "新闻与写作"
+  },
+  {
+    "accountId": "HealthcareReport",
+    "displayName": "医学界智库"
+  },
+  {
+    "accountId": "vicky_daily",
+    "displayName": "和Vicky一起发大财"
+  },
+  {
+    "accountId": "PlantRSS",
+    "displayName": "iPlants"
+  },
+  {
+    "accountId": "guojikexue",
+    "displayName": "国际科学"
+  },
+  {
+    "accountId": "jsszxuedongdeng",
+    "displayName": "超人明视"
+  },
+  {
+    "accountId": "huli_ren",
+    "displayName": "护理人"
+  },
+  {
+    "accountId": "gh_4decbec2cf3d",
+    "displayName": "遥感学报"
+  },
+  {
+    "accountId": "news8848",
+    "displayName": "湘教之家"
+  },
+  {
+    "accountId": "gh_8cfd32987b05",
+    "displayName": "中国实用外科杂志"
+  },
+  {
+    "accountId": "zglspl",
+    "displayName": "中国历史评论"
+  },
+  {
+    "accountId": "Polandballs",
+    "displayName": "波兰球Polandball"
+  },
+  {
+    "accountId": "chinausfocus",
+    "displayName": "中美聚焦"
+  },
+  {
+    "accountId": "anquantongxing2022",
+    "displayName": "安全同行"
+  },
+  {
+    "accountId": "dxyguancha",
+    "displayName": "丁香园用药指南"
+  },
+  {
+    "accountId": "nfykdxxwzx",
+    "displayName": "南方医科大学"
+  },
+  {
+    "accountId": "bdqhjz",
+    "displayName": "北大清华讲座"
+  },
+  {
+    "accountId": "Gene_Immunity",
+    "displayName": "诚信科研"
+  },
+  {
+    "accountId": "shenduscholar",
+    "displayName": "深度学术搜索"
+  },
+  {
+    "accountId": "XinDeyongZISHU",
+    "displayName": "辛德勇自述"
+  },
+  {
+    "accountId": "CBCC-SIBCS",
+    "displayName": "SIBCS"
+  },
+  {
+    "accountId": "gh_500a0b8e18de",
+    "displayName": "骨今中外"
+  },
+  {
+    "accountId": "fanpu2019",
+    "displayName": "返朴"
+  },
+  {
+    "accountId": "SCASS_CAAC",
+    "displayName": "中国航空安全自愿报告系统"
+  }
+]
