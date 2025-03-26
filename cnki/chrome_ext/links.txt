@@ -1,0 +1,5 @@
+https://kns-cnki-net.hk.cnkionline.xyz:8086/bar/download/
+https://api1.sjuku.top/download.php?v=
+https://kns-cnki-net.hk.cnkionline.xyz:8086/bar/download/order
+https://api1.sjuku.top/download2.php
+http://a12.papermao.net/cdown

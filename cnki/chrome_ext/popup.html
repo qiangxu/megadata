@@ -1,0 +1,68 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>知网下载链接提取器</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 300px;
+      padding: 10px;
+    }
+    button {
+      margin: 10px 0;
+      padding: 8px 15px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 10px;
+      color: #333;
+      font-size: 14px;
+      text-align: center;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 5px;
+    }
+    p {
+      text-align: center;
+      color: #666;
+      margin-top: 0;
+      margin-bottom: 15px;
+      font-size: 13px;
+    }
+    .note {
+      font-size: 11px;
+      color: #888;
+      margin-top: 15px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h2>知网下载链接提取器</h2>
+  <p>从当前页面提取下载链接和论文名称</p>
+  
+  <button id="extractAndDownloadButton">提取链接并保存</button>
+  
+  <div id="status">点击按钮开始提取链接</div>
+  
+  <div class="note">
+    提示：如需添加新的网站或链接模式，请修改配置文件
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
