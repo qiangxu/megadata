@@ -22,11 +22,26 @@ HEADERS = {
                 "Referer": "https://api1.sjuku.top/download.php"
 }
 
+def custom_date_parser(date_str):
+    try:
+        # 先尝试直接解析
+        return pd.to_datetime(date_str)
+    except:
+        # 对于YYYYMM格式特殊处理
+        if len(date_str) == 6 and date_str.isdigit():
+            return pd.to_datetime(date_str, format="%Y%m")
+        # 对于YYYYMMDD格式特殊处理
+        elif len(date_str) == 8 and date_str.isdigit():
+            return pd.to_datetime(date_str, format="%Y%m%d")
+        else:
+            breakpoint()
+            # 其他情况返回NaT或抛出异常
+            return pd.NaT
 
 def load_state():
     """加载或创建状态DataFrame"""
     if os.path.exists('./state.json'):
-        return pd.read_json('./state.json', lines=True, orient="records", convert_dates=True)
+        return pd.read_json('./state.json', lines=True, orient="records")
     return pd.DataFrame(columns=['ndjson', 'title', 'date', 'authors', 'url', 'source', 'downloaded'])
 
 def save_state(df_state):
@@ -46,7 +61,8 @@ def process_ndjson_files(df_state, ndjson_dir):
     if len(update_ndjson_files) == 0:
         return df_state 
 
-    df_update = pd.concat([pd.read_json(f, lines=True, orient="records", convert_dates=True).assign(ndjson=Path(f).name) for f in update_ndjson_files], ignore_index=True)
+    df_update = pd.concat([pd.read_json(f, lines=True, orient="records", convert_dates=False).assign(ndjson=Path(f).name) for f in update_ndjson_files], ignore_index=True)
+    df_update['date'] = df_update['date'].apply(custom_date_parser)
 
     df_update = df_update.sort_values(['title', 'authors', 'source', 'date', 'ndjson']).drop_duplicates(['title', 'authors', 'source', 'date'], keep='last')
     df_update['downloaded'] = False
@@ -73,7 +89,7 @@ def download_pdf(php_url, cookies, output_dir, filename_prefix):
     try:
         # PHP -> JSON -> PDF
         json_url = php_url.replace("download.php", "download2.php")
-        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies})
+        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5)
         json_data = json_response.json()
         
         if 'url' in json_data:
@@ -109,18 +125,24 @@ def download_pdf(php_url, cookies, output_dir, filename_prefix):
                         f.write(chunk)
 
                 print("PDF 成功下载!")
+                return (1, 0)
             else:
-                breakpoint()
                 print(f"下载失败，响应不是PDF。内容类型: {content_type}")
-                print("响应内容:", pdf_response.text[:200])  # 只打印前200个字符
+                breakpoint()
+                return (0, 1)
         else:
             print("获取下载链接失败，JSON响应:", json_data)
+            return (0, 1)
     except requests.exceptions.JSONDecodeError as e:
-        print("可能超时")
+        print("疑似超时", json_response.text)
+        return (0, 1)
+    except requests.exceptions.Timeout as e:
+        print("请求超时")
+        return (0, 1)
     except Exception as e: 
         breakpoint()
         print("Unknown Error:", e)
-        pass
+        return (0, 1)
 
 def read_config(config_file):
     """
@@ -145,6 +167,51 @@ def read_config(config_file):
         print(f"错误: 读取配置文件时发生错误: {str(e)}")
         sys.exit(1)
 
+def exec_dump_task(config): 
+    ndjson_dir = config["ndjson_dir"]
+    cookies = config["cookies"]
+    output_dir = config['output_dir']
+
+    # 加载状态
+    df_state = process_ndjson_files(load_state(), ndjson_dir)
+
+    count = (0, 0)
+    to_download_url_index = df_state[~df_state['downloaded']].index
+    print(f"{len(to_download_url_index)}下载")
+    num_failures = 0
+    for url_idx in tqdm(to_download_url_index):
+        try:
+            url = df_state.loc[url_idx]['url']
+            authors = df_state.loc[url_idx]['authors']
+            date = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%Y-%m-%d')
+            source = df_state.loc[url_idx]['source']
+            source = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', source)
+
+            os.makedirs(os.path.join(output_dir, source), exist_ok=True)
+
+            filename_prefix = "%s_%s_" % (date, authors)
+            res = download_pdf(url, cookies, os.path.join(output_dir, source), filename_prefix)
+            count = (count[0] + res[0], count[1] + res[1])
+            
+            if res[0] == 1: 
+                df_state.loc[url_idx, 'downloaded'] = True
+
+                if count[0] % 100 == 0: 
+                    save_state(df_state)
+            else: 
+                if res[1] > 10:
+                    print("Continue?")
+                    breakpoint()
+                if res[1] > 10: 
+                    break
+            # 更新状态
+        except Exception as e: 
+            save_state(df_state)
+            print("Unknown Error:", e)
+            breakpoint()
+
+    save_state(df_state)
+
 def main():
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="读取JSON配置文件")
@@ -155,39 +222,12 @@ def main():
         
     if args.config:
         # 读取配置文件
-        config = read_config(args.config)
-        ndjson_dir = config["ndjson_dir"]
-        cookies = config["cookies"]
-        output_dir = config['output_dir']
 
-        # 加载状态
-        df_state = process_ndjson_files(load_state(), ndjson_dir)
+        while True:
+            config = read_config(args.config)
+            exec_dump_task(config)
+            time.sleep(60)
 
-        counter = 0
-        to_download_url_index = df_state[~df_state['downloaded']].index
-        print(f"{len(to_download_url_index)}下载")
-        for url_idx in tqdm(to_download_url_index):
-            try:
-                url = df_state.loc[url_idx]['url']
-                authors = df_state.loc[url_idx]['authors']
-                date = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%Y-%m-%d')
-                source = df_state.loc[url_idx]['source']
-                source = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', source)
-
-                os.makedirs(os.path.join(output_dir, source), exist_ok=True)
-
-                filename_prefix = "%s_%s_" % (date, authors)
-                download_pdf(url, cookies, os.path.join(output_dir, source), filename_prefix)
-                counter += 1
-                if counter % 100 == 0: 
-                    save_state(df_state)
-                
-                # 更新状态
-                df_state.loc[url_idx, 'downloaded'] = True
-            except Exception as e: 
-                save_state(df_state)
-
-        save_state(df_state)
 if __name__ == "__main__":
     main()
 

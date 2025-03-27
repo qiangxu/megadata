@@ -1,5 +1,5 @@
 {
     "ndjson_dir": "/Users/qiangxu/Downloads/cnki_*.json",
-    "cookies" : "clicaptcha_text=%E5%A3%AE;PHPSESSID=qhl6r95mucdbqlvp640koop206",
-    "output_dir": "./papers"
+    "cookies" : "clicaptcha_text=%E6%B0%91;PHPSESSID=63q7qjephjhe69v3udb9c9v7c2",
+    "output_dir": "./data/papers"
 }
