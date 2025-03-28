@@ -18,6 +18,16 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 
+
+# 隧道域名:端口号
+TUNNEL = "q945.kdltps.com:15818"
+
+# 用户名密码方式
+USERNAME = "t14319390139362"
+PASSWORD = "ngvczjx6"
+PROXIES = { "http": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": USERNAME, "pwd": PASSWORD, "proxy": TUNNEL}, "https": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": USERNAME, "pwd": PASSWORD, "proxy": TUNNEL} }
+
+
 HEADERS = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
                 "Referer": "https://api1.sjuku.top/download.php"
@@ -36,6 +46,7 @@ PAPER_KEYS = [
 STATE_KEYS = ['ndjson', 'downloaded']
 
 STATE_FILE = "./state.json"
+
 def custom_date_parser(date_str):
     try:
         # 先尝试直接解析
@@ -57,7 +68,9 @@ def custom_date_parser(date_str):
 def load_state():
     """加载或创建状态DataFrame"""
     if os.path.exists(STATE_FILE):
-        return pd.read_json(STATE_FILE, lines=True, orient="records")[PAPER_KEYS + STATE_KEYS]
+        df = pd.read_json(STATE_FILE, lines=True, orient="records")[PAPER_KEYS + STATE_KEYS]
+        df['date'] = pd.to_datetime(df['date'], unit='ms')
+        return df
     return pd.DataFrame(columns=PAPER_KEYS + STATE_KEYS)
 
 def save_state(df_state):
@@ -76,7 +89,6 @@ def process_ndjson_files(df_state, ndjson_dir):
     # 处理新文件
     if len(update_ndjson_files) == 0:
         return df_state 
-
     df_update = pd.concat([pd.read_json(f, lines=True, orient="records", convert_dates=False).assign(ndjson=Path(f).name) for f in update_ndjson_files], ignore_index=True)
     df_update['date'] = df_update['date'].apply(custom_date_parser)
 
@@ -102,7 +114,8 @@ def process_ndjson_files(df_state, ndjson_dir):
 def download_php(php_url, cookies):
     try:     
         json_url = php_url.replace("download.php", "download2.php")
-        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5)
+        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5, proxies=PROXIES)
+        #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5)
 
         json_data = json_response.json()
         if 'url' in json_data:
@@ -138,10 +151,9 @@ def download_pdf(url, cookies, file_dir, file_prefix):
         else:
             breakpoint()
             return 1000
-
-        print(f"获取到真实下载链接: {pdf_url}")
         
         # 第二步：下载实际的文件
+        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES, stream=True)
         pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, stream=True)
         
         # 检查内容类型
@@ -257,15 +269,22 @@ def exec_dump_task(config_file):
             elif downloaded == 1: 
                 df_state.loc[url_idx, 'downloaded'] = df_state.loc[url_idx, 'downloaded'] + downloaded
             elif downloaded in [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]: 
-                pass
+                df_state.loc[url_idx, 'downloaded'] = downloaded
             else:
                 save_state(df_state)
                 assert False
 
+            if count % 10 == 0:
+                cookies = reload_cookies(config_file)
+                print("COOKIES RELOADED /STATE SAVED, %s" % cookies)
+
             if count % 30 == 0:
                 save_state(df_state)
-                cookies = reload_cookies(config_file)
-               
+
+            delay = random.uniform(2, 4)  # 随机延迟2-5秒
+            print(f"等待 {delay:.2f} 秒后继续...")
+            time.sleep(delay)
+    
         except Exception as e: 
             save_state(df_state)
             print("Unknown Error:", e)
