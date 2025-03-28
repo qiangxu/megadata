@@ -15,6 +15,7 @@ import requests
 import sys
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 
 
 HEADERS = {
@@ -65,11 +66,11 @@ def process_ndjson_files(df_state, ndjson_dir):
     df_update['date'] = df_update['date'].apply(custom_date_parser)
 
     df_update = df_update.sort_values(['title', 'authors', 'source', 'date', 'ndjson']).drop_duplicates(['title', 'authors', 'source', 'date'], keep='last')
-    df_update['downloaded'] = False
+    df_update['downloaded'] = 1
         
     if len(df_state) > 0: 
         if len(df_update) > 0:
-            df_state = pd.concat([df_state, df_update], ignore_index=True).sort_values(['title', 'authors', 'source', 'date', 'downloaded', 'ndjson']).drop_duplicates(['title', 'authors', 'source', 'date'], keep='last')
+            df_state = pd.concat([df_state, df_update], ignore_index=True).sort_values(['title', 'authors', 'source', 'date', 'downloaded', 'ndjson'], ascending=[True, True, True, True, False, True]).drop_duplicates(['title', 'authors', 'source', 'date'], keep='last')
             save_state(df_state)
             print(f"MERGED {len(df_update)}条新记录")
         else: 
@@ -125,24 +126,23 @@ def download_pdf(php_url, cookies, output_dir, filename_prefix):
                         f.write(chunk)
 
                 print("PDF 成功下载!")
-                return (1, 0)
+                return -1
             else:
                 print(f"下载失败，响应不是PDF。内容类型: {content_type}")
-                breakpoint()
-                return (0, 1)
+                return 0
         else:
             print("获取下载链接失败，JSON响应:", json_data)
-            return (0, 1)
+            return 1
     except requests.exceptions.JSONDecodeError as e:
         print("疑似超时", json_response.text)
-        return (0, 1)
+        return 1
     except requests.exceptions.Timeout as e:
         print("请求超时")
-        return (0, 1)
+        return 1
     except Exception as e: 
-        breakpoint()
+        # breakpoint()
         print("Unknown Error:", e)
-        return (0, 1)
+        return 1000
 
 def read_config(config_file):
     """
@@ -175,40 +175,41 @@ def exec_dump_task(config):
     # 加载状态
     df_state = process_ndjson_files(load_state(), ndjson_dir)
 
-    count = (0, 0)
-    to_download_url_index = df_state[~df_state['downloaded']].index
+    #to_download_mask = (df_state['downloaded'] == 1) | (df_state['downloaded'] >= 1000)
+    to_download_mask = (df_state['downloaded'] > 0)
+    to_download_url_index = df_state[to_download_mask | (df_state['downloaded'] >0)].index
     print(f"{len(to_download_url_index)}下载")
     num_failures = 0
-    for url_idx in tqdm(to_download_url_index):
+    for count in tqdm(range(len(to_download_url_index))): 
+        url_idx = to_download_url_index[count]
+        url = df_state.loc[url_idx]['url']
+        authors = df_state.loc[url_idx]['authors']
+        date = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%Y-%m-%d')
+        source = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', df_state.loc[url_idx]['source'])
+
+        filename_prefix = "%s_%s_" % (date, authors)
+
+        os.makedirs(os.path.join(output_dir, source), exist_ok=True)
+
+
         try:
-            url = df_state.loc[url_idx]['url']
-            authors = df_state.loc[url_idx]['authors']
-            date = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%Y-%m-%d')
-            source = df_state.loc[url_idx]['source']
-            source = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', source)
-
-            os.makedirs(os.path.join(output_dir, source), exist_ok=True)
-
-            filename_prefix = "%s_%s_" % (date, authors)
-            res = download_pdf(url, cookies, os.path.join(output_dir, source), filename_prefix)
-            count = (count[0] + res[0], count[1] + res[1])
-            
-            if res[0] == 1: 
-                df_state.loc[url_idx, 'downloaded'] = True
-
-                if count[0] % 100 == 0: 
-                    save_state(df_state)
-            else: 
-                if res[1] > 10:
-                    print("Continue?")
-                    breakpoint()
-                if res[1] > 10: 
-                    break
+            downloaded = download_pdf(url, cookies, os.path.join(output_dir, source), filename_prefix)
             # 更新状态
+            if downloaded == -1 or downloaded == 0: 
+                df_state.loc[url_idx, 'downloaded'] = downloaded
+
+            elif downloaded == 1: 
+                df_state.loc[url_idx, 'downloaded'] = df_state.loc[url_idx, 'downloaded'] + downloaded
+            else: 
+                assert False
+
+            if count % 100 == 0:
+                save_state(df_state)
+               
         except Exception as e: 
             save_state(df_state)
             print("Unknown Error:", e)
-            breakpoint()
+            #breakpoint()
 
     save_state(df_state)
 
@@ -226,7 +227,7 @@ def main():
         while True:
             config = read_config(args.config)
             exec_dump_task(config)
-            time.sleep(60)
+            time.sleep(20)
 
 if __name__ == "__main__":
     main()
