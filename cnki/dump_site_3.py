@@ -114,8 +114,9 @@ def process_ndjson_files(df_state, ndjson_dir):
 def download_php(php_url, cookies):
     try:     
         json_url = php_url.replace("download.php", "download2.php")
-        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5, proxies=PROXIES)
-        #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5)
+        #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES)
+        #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=10)
+        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies})
 
         json_data = json_response.json()
         if 'url' in json_data:
@@ -134,7 +135,7 @@ def download_php(php_url, cookies):
         if "请稍后在试" in json_response.text:
             raise Exception("RELIABILITY_ERROR", json_response.text)
         else:
-            breakpoint()
+            #breakpoint()
             print("疑似超时", json_response.text)
             raise requests.exceptions.Timeout()
 
@@ -153,7 +154,7 @@ def download_pdf(url, cookies, file_dir, file_prefix):
             return 1000
         
         # 第二步：下载实际的文件
-        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES, stream=True)
+        #pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES, stream=True)
         pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, stream=True)
         
         # 检查内容类型
@@ -193,6 +194,8 @@ def download_pdf(url, cookies, file_dir, file_prefix):
         if "Read timed out" in str(e): 
             print("连接超时", e)
             return 3000
+
+        return 1
     except Exception as e: 
         if "RELIABILITY_ERROR" in str(e): 
             print("稍后再试", e)
@@ -281,7 +284,7 @@ def exec_dump_task(config_file):
             if count % 30 == 0:
                 save_state(df_state)
 
-            delay = random.uniform(2, 4)  # 随机延迟2-5秒
+            delay = random.uniform(3, 5)  # 随机延迟2-5秒
             print(f"等待 {delay:.2f} 秒后继续...")
             time.sleep(delay)
     
