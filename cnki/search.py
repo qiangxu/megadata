@@ -16,6 +16,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import random
+from requests_toolbelt.utils import dump
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -43,7 +44,7 @@ def read_config(config_file):
         print(f"错误: 读取配置文件时发生错误: {str(e)}")
         sys.exit(1)
 
-def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False, cookies=None):
+def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=True, cookies=None):
     """
     按分类号搜索中国知网(CNKI)并获取结果
     
@@ -59,7 +60,6 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False,
     """
     # CNKI搜索API地址
     url = "http://222.186.61.87:8085/kns8s/brief/grid"
-    
     # 构建查询JSON
     query_json = {
         # 平台标识，通常为空字符串，可选
@@ -74,7 +74,8 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False,
         
         # 具体产品列表，以逗号分隔的产品代码，在跨库搜索时必需
         # CJFQ(中文期刊)、CDFD(博士)、CMFD(硕士)、CAPJ(特色期刊)等
-        "Products": "CJFQ,CAPJ,CJTL,CDFD,CMFD,CPFD,IPFD,CPVD,CCND,WBFD,SCSF,SCHF,SCSD,SNAD,CCJD,CJFN,CCVD",
+        #"Products": "CJFQ,CAPJ,CJTL,CDFD,CMFD,CPFD,IPFD,CPVD,CCND,WBFD,SCSF,SCHF,SCSD,SNAD,CCJD,CJFN,CCVD",
+        "Products": "",
         
         # 查询节点，包含所有查询条件，必需
         "QNode": {
@@ -116,7 +117,7 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False,
         "Expands": {},
         
         # 搜索来源，对于第一页是2，对于后续页是4（重要）
-        "SearchFrom": 4 if page > 1 else 2
+        "SearchFrom": 4 if page > 1 else 1
     }
     
     # 添加SCI过滤条件（如果需要）
@@ -155,12 +156,13 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False,
     
     # 构建表单数据
     data = {
-        "boolSearch": "false",  # 对所有页面都是false
+        #"boolSearch": "false",  # 对所有页面都是false
+        "boolSearch": False if page > 1 else True, 
         "QueryJson": json.dumps(query_json),
         "pageNum": page,
         "pageSize": page_size,
         "sortField": "PT",         # PT表示按发表时间排序
-        "sortType": "desc",        # 所有页面都是小写desc
+        "sortType": "DESC",        # 所有页面都是小写desc
         "dstyle": "listmode",      # 列表模式
         "boolSortSearch": "false", # 必需参数
         "productStr": "YSTT4HG0,LSTPFY1C,RMJLXHZ3,JQIRZIYA,JUP3MUPD,1UR4K4HZ,BPBAFJ5S,R79MZMCB,MPMFIG1A,EMRPGLPA,J708GVCE,ML4DRIDX,WQ0UVIAA,NB3BWEHK,XVLO76FD,HR1YT1Z9,BLZOG7CK,PWFIRAGL,NN3FJMUV,NLBO1Z6R,",
@@ -185,18 +187,6 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False,
         "Referer": "http://222.186.61.87:8085/kns8s/defaultresult/index"
     }
     
-    # 如果没有提供cookies，使用默认cookies
-    if not cookies:
-        cookies = {
-            "SID_kns_new": "kns2618106",
-            "knsLeftGroupSelectItem": "",
-            "SID_sug": "018107",
-            "SID_restapi": "018107",
-            "dblang": "both",
-            "dsorders": "PT",
-            "dsortypes": "cur DESC"
-        }
-    
     # 发送HTTP请求
     try:
         response = requests.post(url, data=data, headers=headers, cookies=cookies, verify=False)
@@ -207,10 +197,9 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=False,
         print(f"请求URL: {url}")
         print(f"请求参数: {data}")
         return ""
-
 def extract_publications(html_content, category_code):
     """
-    从HTML响应中提取出版物信息
+    从HTML响应中提取出版物信息，并转换链接格式
     
     参数:
     html_content (str): HTML格式的搜索结果
@@ -247,8 +236,8 @@ def extract_publications(html_content, category_code):
             # 移除标题中的字体标签
             title = re.sub(r'<font.*?>|</font>', '', title)
             
-            # 提取下载链接
-            download_link = title_element.get('href') if title_element else None
+            # 获取原始URL
+            orig_url = title_element.get('href') if title_element else None
             
             # 提取作者
             authors_element = row.find('td', class_='author')
@@ -259,24 +248,56 @@ def extract_publications(html_content, category_code):
                     authors.append(author.get_text(strip=True))
             
             # 提取来源（期刊/会议名称）
-            source_element = row.find('td', class_='source').find('a')
-            source = source_element.get_text(strip=True) if source_element else "N/A"
+            source_element = row.find('td', class_='source')
+            source = ""
+            if source_element:
+                source_link = source_element.find('a')
+                if source_link:
+                    source = source_link.get_text(strip=True)
+                else:
+                    source = source_element.get_text(strip=True)
             
             # 提取日期
             date_element = row.find('td', class_='date')
             date = date_element.get_text(strip=True) if date_element else "N/A"
             
-            publications.append({
-                'title': title,
-                'authors': ','.join(authors),
-                'source': source,
-                'date': date,
-                'url': download_link,
-                'category': category_code  # 添加分类号
-            })
+            # 提取数据库代码和文件名
+            collect_icon = row.find('a', class_='icon-collect')
+            dbname = collect_icon.get('data-dbname', "") if collect_icon else ""
+            filename = collect_icon.get('data-filename', "") if collect_icon else ""
+            
+            # 构建下载链接
+            download_link = None
+            if orig_url and '?' in orig_url:
+                # 获取查询参数部分 - 确保保持原始编码格式
+                query_part = orig_url.split('?')[1]
+                
+                # 替换&为&amp;以匹配JavaScript行为
+                query_part = query_part.replace('&', '&amp;')
+                
+                # 构建ddata参数 - 使用原始的URL编码函数，不对:进行编码
+                #f"{filename}|{dbname}|{title}||{source}|{date}"
+
+                ddata_str_encoded = "|".join([urllib.parse.quote(filename, safe='()/:?=&'), urllib.parse.quote(dbname, safe='()/:?=&'), urllib.parse.quote(title, safe='()'), urllib.parse.quote("", safe='()/:?=&'), urllib.parse.quote(source, safe='()/:?=&'), urllib.parse.quote(date, safe='()/:?=&')])
+                
+                # 构建新URL
+                download_link = f"https://api1.sjuku.top/download.php?{query_part}&amp;ddata={ddata_str_encoded}"
+           	
+                publications.append({
+                    'title': title,
+                    'authors': ','.join(authors),
+                    'source': source,
+                    'date': date,
+                    'url': download_link,
+                    'category': category_code,
+                    'filename': filename,
+                    'dbname': dbname
+                })
             
         except Exception as e:
             print(f"提取出版物时出错: {e}")
+            import traceback
+            print(traceback.format_exc())
     
     return publications
 
@@ -352,8 +373,7 @@ def check_existing_file(ndjson_dir, category_code, page):
     valid_records = sum(1 for record in records if record.get('url'))
     
     return True, matching_files, valid_records
-
-def search_and_save(category_code, config, sci_only=False, page=1, page_size=50):
+def search_and_save(category_code, config, sci_only=True, page=1, page_size=50):
     """
     按分类号搜索CNKI并保存结果
     
@@ -365,7 +385,7 @@ def search_and_save(category_code, config, sci_only=False, page=1, page_size=50)
     page_size (int): 每页结果数
     
     返回:
-    list: 出版物信息列表
+    tuple: (出版物信息列表, 是否实际发送了请求)
     """
     # 获取ndjson目录
     ndjson_dir = config.get("ndjson_dir", "./")
@@ -389,10 +409,10 @@ def search_and_save(category_code, config, sci_only=False, page=1, page_size=50)
                     publications.append(record)
                 except json.JSONDecodeError:
                     continue
-        return publications
+        return publications, False  # 返回数据和"未发送请求"标志
     
     # 从配置中获取cookies
-    cookies_str = config.get("cookies", "")
+    cookies_str = config.get("search_cookies", "")
     cookies = {}
     
     # 解析cookies字符串
@@ -401,7 +421,6 @@ def search_and_save(category_code, config, sci_only=False, page=1, page_size=50)
             if '=' in item:
                 key, value = item.strip().split('=', 1)
                 cookies[key] = value
-    
     # 搜索CNKI
     html_content = search_cnki_by_category(category_code, page, page_size, sci_only, cookies)
     
@@ -415,7 +434,7 @@ def search_and_save(category_code, config, sci_only=False, page=1, page_size=50)
     else:
         print(f"分类 {category_code} 第 {page} 页: 未找到匹配的出版物")
     
-    return publications
+    return publications, True  # 返回数据和"已发送请求"标志
 
 def read_metadata(file_path='./metadata.json'):
     """
@@ -449,7 +468,6 @@ def read_metadata(file_path='./metadata.json'):
     except Exception as e:
         print(f"读取文件时发生错误: {str(e)}")
         return {}, 0
-
 def main():
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="按分类号搜索CNKI并保存结果为NDJSON格式")
@@ -492,13 +510,16 @@ def main():
         
         print(f"{i}. {code}: {info['name']} - {category_size}篇 (最大页数: {max_pages}, 计划抓取: {pages_to_fetch}页)")
         
+
         # 对每个分类，抓取指定数量的页面
         total_publications = 0
         for page_offset in range(pages_to_fetch):
             current_page = args.page + page_offset
             print(f"\n开始抓取分类 {code} ({info['name']}) 第 {current_page} 页 (总进度: {page_offset+1}/{pages_to_fetch})")
             
-            publications = search_and_save(code, config, args.sci, current_page, args.page_size)
+            # 搜索并保存，获取是否实际发送了请求的标志
+            publications, made_request = search_and_save(code, config, args.sci, current_page, args.page_size)
+            
             total_publications += len(publications)
             
             # 如果当前页没有结果，认为已到最后一页，停止抓取此分类
@@ -506,19 +527,12 @@ def main():
                 print(f"分类 {code} 没有更多结果，停止抓取")
                 break
             
-            # 每次请求之间暂停一下，避免请求过于频繁
-            if page_offset < pages_to_fetch - 1 and len(publications) > 0:
+            # 只有在实际发送了请求并且不是最后一页的情况下才进行延迟
+            if made_request and page_offset < pages_to_fetch - 1 and len(publications) > 0:
                 delay = random.uniform(2, 5)  # 随机延迟2-5秒
                 print(f"等待 {delay:.2f} 秒后继续...")
                 time.sleep(delay)
         
-        print(f"分类 {code} ({info['name']}) 共抓取 {total_publications} 条记录")
-        
-        # 每个分类之间暂停一下，避免请求过于频繁
-        if i < len(sorted_categories):
-            delay = random.uniform(5, 10)  # 随机延迟5-10秒
-            print(f"等待 {delay:.2f} 秒后继续下一个分类...")
-            time.sleep(delay)
     
     print("\n所有分类抓取完成!")
 if __name__ == "__main__":
