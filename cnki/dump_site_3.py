@@ -23,6 +23,19 @@ HEADERS = {
                 "Referer": "https://api1.sjuku.top/download.php"
 }
 
+PAPER_KEYS = [
+        'title', 
+        'authors', 
+        'date', 
+        'category', 
+        'filename', 
+        'dbname',
+        'source', 
+        'url'
+        ]
+STATE_KEYS = ['ndjson', 'downloaded']
+
+STATE_FILE = "./state.json"
 def custom_date_parser(date_str):
     try:
         # 先尝试直接解析
@@ -34,20 +47,22 @@ def custom_date_parser(date_str):
         # 对于YYYYMMDD格式特殊处理
         elif len(date_str) == 8 and date_str.isdigit():
             return pd.to_datetime(date_str, format="%Y%m%d")
+        elif date_str == "N/A":
+            return pd.to_datetime("19700101", format="%Y%m%d") 
         else:
             breakpoint()
             # 其他情况返回NaT或抛出异常
-            return pd.NaT
+            return pd.to_datetime("19700101", format="%Y%m%d") 
 
 def load_state():
     """加载或创建状态DataFrame"""
-    if os.path.exists('./state.json'):
-        return pd.read_json('./state.json', lines=True, orient="records")
-    return pd.DataFrame(columns=['ndjson', 'title', 'date', 'authors', 'url', 'source', 'downloaded'])
+    if os.path.exists(STATE_FILE):
+        return pd.read_json(STATE_FILE, lines=True, orient="records")[PAPER_KEYS + STATE_KEYS]
+    return pd.DataFrame(columns=PAPER_KEYS + STATE_KEYS)
 
 def save_state(df_state):
     """保存状态DataFrame到硬盘(ndjson格式)"""
-    df_state.to_json("./state.json", lines=True, orient="records", force_ascii=False)
+    df_state.to_json(STATE_FILE, lines=True, orient="records", force_ascii=False)
 
 def process_ndjson_files(df_state, ndjson_dir):
     """处理ndjson文件并更新状态"""
@@ -55,7 +70,7 @@ def process_ndjson_files(df_state, ndjson_dir):
     exist_ndjson_files = set(df_state['ndjson'].unique())
     
     # 查找所有新ndjson文件
-    input_ndjson_files = [f for f in glob.glob(ndjson_dir)]
+    input_ndjson_files = [f for f in glob.glob(os.path.join(ndjson_dir, "*.json"))]
     update_ndjson_files = [f for f in input_ndjson_files if Path(f).name not in exist_ndjson_files]
     
     # 处理新文件
@@ -84,65 +99,101 @@ def process_ndjson_files(df_state, ndjson_dir):
 
     return df_state
 
-def download_pdf(php_url, cookies, output_dir, filename_prefix):
-    # 获取URL
-
-    try:
-        # PHP -> JSON -> PDF
+def download_php(php_url, cookies):
+    try:     
         json_url = php_url.replace("download.php", "download2.php")
         json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=5)
+
         json_data = json_response.json()
-        
         if 'url' in json_data:
             pdf_url = json_data['url']
             print(f"获取到真实下载链接: {pdf_url}")
             
-            # 第二步：下载实际的文件
-            pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, stream=True)
-            
-            # 检查内容类型
-            content_type = pdf_response.headers.get('content-type', '')
-            content_disposition =  pdf_response.headers['Content-Disposition']
-            # print(f"文件内容类型: {content_type}")
-            
-            if 'application/pdf' in content_type.lower() or 'application/octet-stream' in content_type.lower() or content_disposition.upper().endswith('.PDF'):
-                assert "FILENAME*=UTF" in content_disposition.upper()
-
-                encoded_str = content_disposition.upper().split("FILENAME*=UTF-8''")[-1]
-
-                # 解码URL编码的字符串
-                filename = urllib.parse.unquote(encoded_str, encoding='utf-8')
-                filename = filename_prefix + filename.split('/')[-1]
-                
-                safe_filename = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', filename)
-                assert safe_filename.endswith('.PDF')
-                safe_filename = safe_filename.split(".PDF")[0] + ".pdf"
-
-                # 保存PDF
-                filepath = Path(output_dir) / safe_filename
-
-                with open(filepath, 'wb') as f:
-                    for chunk in pdf_response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-
-                print("PDF 成功下载!")
-                return -1
-            else:
-                print(f"下载失败，响应不是PDF。内容类型: {content_type}")
-                return 0
+            return pdf_url
         else:
-            print("获取下载链接失败，JSON响应:", json_data)
-            return 1
+            breakpoint()
+            print("PHP URL\n", php_url, "\n 获取下载链接失败，JSON响应:", json_data)
     except requests.exceptions.JSONDecodeError as e:
-        print("疑似超时", json_response.text)
-        return 1
+        if "Couldn\'t fetch mysqli" in json_response.text:
+            raise requests.exceptions.Timeout("OVERLOAD", json_response.text)
+        if "授权已超时，请重新进入" in json_response.text:
+            raise Exception("AUTH_EXPIRED", json_response.text)
+        if "请稍后在试" in json_response.text:
+            raise Exception("RELIABILITY_ERROR", json_response.text)
+        else:
+            breakpoint()
+            print("疑似超时", json_response.text)
+            raise requests.exceptions.Timeout()
+
+def download_pdf(url, cookies, file_dir, file_prefix):
+    # 获取URL
+
+    try:
+        if "download.php" in url: 
+            # PHP -> JSON -> PDF
+            pdf_url = download_php(url, cookies)
+        elif "kcms2/article/abstract" in url:
+            php_url = "https://api1.sjuku.top/download.php?v=" + url.split("kcms2/article/abstract?v=")[-1]
+            pdf_url = download_php(php_url, cookies)
+        else:
+            breakpoint()
+            return 1000
+
+        print(f"获取到真实下载链接: {pdf_url}")
+        
+        # 第二步：下载实际的文件
+        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, stream=True)
+        
+        # 检查内容类型
+        content_type = pdf_response.headers.get('content-type', '')
+        content_disposition =  pdf_response.headers['Content-Disposition']
+        # print(f"文件内容类型: {content_type}")
+        
+        if 'application/pdf' in content_type.lower() or 'application/octet-stream' in content_type.lower() or content_disposition.upper().endswith('.PDF'):
+            assert "FILENAME*=UTF" in content_disposition.upper()
+
+            encoded_str = content_disposition.upper().split("FILENAME*=UTF-8''")[-1]
+
+            # 解码URL编码的字符串
+            filename = urllib.parse.unquote(encoded_str, encoding='utf-8')
+            filename = file_prefix + filename.split('/')[-1]
+            
+            safe_filename = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', filename)
+            assert safe_filename.endswith('.PDF')
+            safe_filename = safe_filename.split(".PDF")[0][0:200] + ".pdf"
+
+            # 保存PDF
+            filepath = Path(file_dir) / safe_filename
+
+            with open(filepath, 'wb') as f:
+                for chunk in pdf_response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            print("PDF 成功下载!")
+            return -1
+        else: 
+            print(f"下载失败，响应不是PDF。内容类型: {content_type}")
+            return 0
     except requests.exceptions.Timeout as e:
-        print("请求超时")
-        return 1
+        if "OVERLOAD" in str(e):
+            print("负载过高", e)
+            return 2000
+        if "Read timed out" in str(e): 
+            print("连接超时", e)
+            return 3000
     except Exception as e: 
-        # breakpoint()
+        if "RELIABILITY_ERROR" in str(e): 
+            print("稍后再试", e)
+            return 4000
+        if "AUTH_EXPIRED" in str(e): 
+            print("认证超时", e)
+            return 5000
+        if "Remote end closed connection without response" in str(e):
+            print("连接超时", e)
+            return 3000
+        breakpoint()
         print("Unknown Error:", e)
-        return 1000
+        return 9000
 
 def read_config(config_file):
     """
@@ -167,49 +218,58 @@ def read_config(config_file):
         print(f"错误: 读取配置文件时发生错误: {str(e)}")
         sys.exit(1)
 
-def exec_dump_task(config): 
+def reload_cookies(config_file):
+    return read_config(config_file)["dump_cookies"]
+
+def exec_dump_task(config_file): 
+    config = read_config(config_file)
     ndjson_dir = config["ndjson_dir"]
-    cookies = config["cookies"]
+    cookies = config["dump_cookies"]
     output_dir = config['output_dir']
 
     # 加载状态
+
     df_state = process_ndjson_files(load_state(), ndjson_dir)
 
     #to_download_mask = (df_state['downloaded'] == 1) | (df_state['downloaded'] >= 1000)
-    to_download_mask = (df_state['downloaded'] > 0)
-    to_download_url_index = df_state[to_download_mask | (df_state['downloaded'] >0)].index
+    to_download_mask = (df_state['downloaded'] == 1)
+    to_download_url_index = df_state[to_download_mask | (df_state['downloaded'] >0)].index.values
     print(f"{len(to_download_url_index)}下载")
-    num_failures = 0
+    random.shuffle(to_download_url_index)
     for count in tqdm(range(len(to_download_url_index))): 
         url_idx = to_download_url_index[count]
         url = df_state.loc[url_idx]['url']
         authors = df_state.loc[url_idx]['authors']
         date = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%Y-%m-%d')
-        source = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', df_state.loc[url_idx]['source'])
+        month = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%m')
+        category = df_state.loc[url_idx]['category']
 
-        filename_prefix = "%s_%s_" % (date, authors)
-
-        os.makedirs(os.path.join(output_dir, source), exist_ok=True)
-
+        file_prefix = "%s_%s_" % (date, authors)
+        file_dir = os.path.join(output_dir, category, month)
+        os.makedirs(file_dir, exist_ok=True)
 
         try:
-            downloaded = download_pdf(url, cookies, os.path.join(output_dir, source), filename_prefix)
+            downloaded = download_pdf(url, cookies, file_dir, file_prefix)
             # 更新状态
             if downloaded == -1 or downloaded == 0: 
                 df_state.loc[url_idx, 'downloaded'] = downloaded
 
             elif downloaded == 1: 
                 df_state.loc[url_idx, 'downloaded'] = df_state.loc[url_idx, 'downloaded'] + downloaded
-            else: 
+            elif downloaded in [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]: 
+                pass
+            else:
+                save_state(df_state)
                 assert False
 
-            if count % 100 == 0:
+            if count % 30 == 0:
                 save_state(df_state)
+                cookies = reload_cookies(config_file)
                
         except Exception as e: 
             save_state(df_state)
             print("Unknown Error:", e)
-            #breakpoint()
+            breakpoint()
 
     save_state(df_state)
 
@@ -225,9 +285,8 @@ def main():
         # 读取配置文件
 
         while True:
-            config = read_config(args.config)
-            exec_dump_task(config)
-            time.sleep(20)
+            exec_dump_task(args.config)
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
