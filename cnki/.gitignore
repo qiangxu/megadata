@@ -1,0 +1,5 @@
+data/*
+*.sw[a-z]
+*.sw[A-Z]
+.DS_Store
+
