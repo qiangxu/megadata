@@ -2,4 +2,6 @@ data/*
 *.sw[a-z]
 *.sw[A-Z]
 .DS_Store
-
+bak/*.json
+site[0-9]/links
+site[0-9]/data

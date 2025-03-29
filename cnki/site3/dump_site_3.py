@@ -15,9 +15,12 @@ import requests
 import sys
 import time
 import urllib.parse
+import urllib3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
+# 禁用 SSL 警告
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 """
 # 隧道域名:端口号
@@ -307,7 +310,7 @@ def exec_dump_task(config_file):
             if count % 30 == 0:
                 pass
 
-            delay = random.uniform(6, 10)  # 随机延迟2-5秒
+            delay = random.uniform(4, 8)  # 随机延迟2-5秒
             print(f"等待 {delay:.2f} 秒后继续...")
             time.sleep(delay)
     
