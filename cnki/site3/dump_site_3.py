@@ -16,9 +16,10 @@ import sys
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 
-
+"""
 # 隧道域名:端口号
 TUNNEL = "q945.kdltps.com:15818"
 
@@ -26,7 +27,7 @@ TUNNEL = "q945.kdltps.com:15818"
 USERNAME = "t14319390139362"
 PASSWORD = "ngvczjx6"
 PROXIES = { "http": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": USERNAME, "pwd": PASSWORD, "proxy": TUNNEL}, "https": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": USERNAME, "pwd": PASSWORD, "proxy": TUNNEL} }
-
+"""
 
 HEADERS = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -45,7 +46,10 @@ PAPER_KEYS = [
         ]
 STATE_KEYS = ['ndjson', 'downloaded']
 
-STATE_FILE = "./state.json"
+EXE_DIR = os.path.dirname(os.path.abspath(__file__))
+print(f"当前脚本目录: {EXE_DIR}")
+
+STATE_FILE = os.path.join(EXE_DIR, "state.json")
 
 def custom_date_parser(date_str):
     try:
@@ -61,7 +65,7 @@ def custom_date_parser(date_str):
         elif date_str == "N/A":
             return pd.to_datetime("19700101", format="%Y%m%d") 
         else:
-            breakpoint()
+            # breakpoint()
             # 其他情况返回NaT或抛出异常
             return pd.to_datetime("19700101", format="%Y%m%d") 
 
@@ -111,9 +115,9 @@ def process_ndjson_files(df_state, ndjson_dir):
 
     return df_state
 
-def download_php(php_url, cookies):
+def extract_pdf_url_site3(url, cookies):
     try:     
-        json_url = php_url.replace("download.php", "download2.php")
+        json_url = url.replace("download.php", "download2.php")
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES)
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=10)
         json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies})
@@ -125,19 +129,20 @@ def download_php(php_url, cookies):
             
             return pdf_url
         else:
-            breakpoint()
-            print("PHP URL\n", php_url, "\n 获取下载链接失败，JSON响应:", json_data)
+            print("URL:\n\t", url, "\n 获取下载链接失败，RESP响应:\n\t", json_data)
+            raise Exception("BUG", json_data)
+
     except requests.exceptions.JSONDecodeError as e:
+        breakpoint()
         if "Couldn\'t fetch mysqli" in json_response.text:
-            raise requests.exceptions.Timeout("OVERLOAD", json_response.text)
+            raise Exception("OVERLOAD", json_response.text)
         if "授权已超时，请重新进入" in json_response.text:
-            raise Exception("AUTH_EXPIRED", json_response.text)
+            raise Exception("AUTH", json_response.text)
         if "请稍后在试" in json_response.text:
-            raise Exception("RELIABILITY_ERROR", json_response.text)
-        else:
-            #breakpoint()
-            print("疑似超时", json_response.text)
-            raise requests.exceptions.Timeout()
+            raise Exception("RELIABILITY", json_response.text)
+        if "Maximum execution time of 30 seconds exceeded" in json_response.text:
+            raise Exception("OVERLOAD", json_response.text)
+        raise Exception("UNKNOWN", json_response.text)
 
 def gen_safe_filepath(file_dir, title, authors, date):
 
@@ -150,21 +155,19 @@ def gen_safe_filepath(file_dir, title, authors, date):
 
 def download_pdf(url, cookies, file_path):
     # 获取URL
-
     try:
         if "download.php" in url: 
             # PHP -> JSON -> PDF
-            pdf_url = download_php(url, cookies)
-        elif "kcms2/article/abstract" in url:
-            php_url = "https://api1.sjuku.top/download.php?v=" + url.split("kcms2/article/abstract?v=")[-1]
-            pdf_url = download_php(php_url, cookies)
+            pdf_url = extract_pdf_url_site3(url, cookies)
+        elif "api88.wenxian.shop/v1/api/download?" in url:
+            pdf_url, _, _, remaining_seconds = extract_pdf_url_site2(url, cookies)
         else:
-            breakpoint()
+            # BREAkpoint()
             return 1000
         
         # 第二步：下载实际的文件
         #pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES, stream=True)
-        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, stream=True)
+        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, verify=False, stream=True)
         
         # 检查内容类型
         content_type = pdf_response.headers.get('content-type', '')
@@ -183,31 +186,36 @@ def download_pdf(url, cookies, file_path):
             return -1
         else: 
             print(f"下载失败，响应不是PDF。内容类型: {content_type}")
-            return 0
+            return 1
     except requests.exceptions.Timeout as e:
-        if "OVERLOAD" in str(e):
-            print("负载过高", e)
-            return 2000
         if "Read timed out" in str(e): 
             print("连接超时", e)
             return 3000
-
         return 1
     except Exception as e: 
-        if "RELIABILITY_ERROR" in str(e): 
-            print("稍后再试, 延长SLEEP", e)
+        if "OVERLOAD" in str(e):
+            print("负载过高, 重试即可", e)
+            return 2000
+        if "RELIABILITY" in str(e): 
+            print("稍后再试, 重试即可", e)
             return 4000
-        if "AUTH_EXPIRED" in str(e): 
+        if "AUTH" in str(e): 
             print("认证超时, 换COOKIES", e)
             return 5000
         if "Remote end closed connection without response" in str(e):
             print("连接超时", e)
             return 3000
-        if "EOF occurred" in str(e): 
+        if "EOF" in str(e): 
             print("网络断开", e)
             return 3000
+        if "BUG" in str(e): 
+            print("需要调试DBEUG URL", e)
+            return 6000
+        if "UNKNOWN" in str(e): 
+            print("UNKNOWN", e)
+            return 9000
 
-        print("Unknown Error:", e)
+        print("UNKNOWN:", e)
         return 9000
 
 def read_config(config_file):
@@ -221,8 +229,16 @@ def read_config(config_file):
         dict: 解析后的配置数据
     """
     try:
+        CNF_DIR = os.path.dirname(os.path.abspath(config_file))
         with open(config_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            config = json.load(f)
+            config["ndjson_dir"] = str(Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve())
+            config["output_dir"] = str(Path(os.path.join(CNF_DIR, config['output_dir'])).resolve())
+
+            os.makedirs(config["ndjson_dir"], exist_ok=True)
+            os.makedirs(config["output_dir"], exist_ok=True)
+            return config
+
     except FileNotFoundError:
         print(f"错误: 找不到配置文件 '{config_file}'")
         sys.exit(1)
@@ -237,6 +253,7 @@ def reload_cookies(config_file):
     return read_config(config_file)["dump_cookies"]
 
 def exec_dump_task(config_file): 
+    # breakpoint()
     config = read_config(config_file)
     ndjson_dir = config["ndjson_dir"]
     cookies = config["dump_cookies"]
@@ -246,8 +263,9 @@ def exec_dump_task(config_file):
 
     df_state = process_ndjson_files(load_state(), ndjson_dir)
 
-    #to_download_mask = (df_state['downloaded'] == 1) | (df_state['downloaded'] >= 1000)
-    to_download_mask = (df_state['downloaded'] == 1)
+    to_download_mask = (df_state['downloaded'] == 1) | (df_state['downloaded'] == 2000) | (df_state['downloaded'] == 4000)
+    #| (df_state['downloaded'] == 2)
+    #to_download_mask = (df_state['downloaded'] == 1)
     to_download_url_index = df_state[to_download_mask | (df_state['downloaded'] >0)].index.values
     print(f"{len(to_download_url_index)}下载")
     random.shuffle(to_download_url_index)
@@ -296,9 +314,51 @@ def exec_dump_task(config_file):
         except Exception as e: 
             save_state(df_state)
             print("Unknown Error:", e)
-            breakpoint()
+            # breakpoint()
 
-    save_state(df_state)
+    if len(df_state) > 0:
+        save_state(df_state)
+
+def extract_pdf_url_site2(url, cookies=None):
+    """
+    从API获取下载页面，提取最终下载URL和过期时间
+    
+    Parameters:
+    url (str): API下载链接
+    cookies (dict): 请求所需的cookies，可选
+    
+    Returns:
+    dict: 包含下载信息的字典
+    """
+    # 发送请求获取下载页面的HTML
+
+    response = requests.get(url, headers=HEADERS | {'Cookie': cookies})
+    
+    # 寻找setTimeout函数中的链接
+    pdf_urls = re.findall(r'https?://[\w\d\.\-:]+/[^"\s]+\.pdf[^"\s]*', response.text)
+    if pdf_urls:
+        pdf_url = pdf_urls[0].replace('\\u0026', '&').replace('\\\\u0026', '&')
+    else:
+        print("URL:\n\t", url, "\n 获取下载链接失败，RESP响应:\n\t", response.text)
+        raise Exception("BUG", response.text)
+    
+    # 解析URL参数
+    parsed_url = urllib.parse.urlparse(pdf_url)
+    query_params = urllib.parse.parse_qs(parsed_url.query)
+    
+    # 提取过期时间
+    expires = None
+    expires_datetime = None
+    if 'Expires' in query_params:
+        expires = int(query_params['Expires'][0])
+        expires_datetime = datetime.fromtimestamp(expires)
+        current_time = time.time()
+        remaining_seconds = int(expires - current_time)
+    else:
+        remaining_seconds = None
+
+    # 返回提取的信息
+    return pdf_url, expires, expires_datetime, remaining_seconds
 
 def main():
     # 创建命令行参数解析器
@@ -310,10 +370,7 @@ def main():
         
     if args.config:
         # 读取配置文件
-
-        while True:
-            exec_dump_task(args.config)
-            time.sleep(10)
+        exec_dump_task(args.config)
 
 if __name__ == "__main__":
     main()
