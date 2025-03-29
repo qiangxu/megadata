@@ -1,6 +1,6 @@
 {
     "ndjson_dir": "../site2/links/",
-    "dump_cookies" : "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDMyNDk5NzIsImlhdCI6MTc0MzI0NjM3MiwidXNlciI6IjIyNDA0ODIiLCJkb21haW4iOiJzaHV0b25nMTIxLmNvbSJ9.KUUL3riH1AALR50S-jTtUfl7F6KXRKPMNERUUTByrWM;d=shutong121.com;location=1",
+    "dump_cookies" : "token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDMyNjU1MzksImlhdCI6MTc0MzI2MTkzOSwidXNlciI6IjIyNDA0ODIiLCJkb21haW4iOiJzaHV0b25nMTIxLmNvbSJ9.vwKwmZGKkg-48ZwEg_WxQgVSM6W04-yPf2ocY-fSbtc;d=shutong121.com;location=1",
     "search_cookies" : "dblang=both;SID_kns_new=kns2618110;wd=false",
     "output_dir": "../data/sci"
 }
