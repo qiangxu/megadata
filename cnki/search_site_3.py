@@ -17,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 import random
 from requests_toolbelt.utils import dump
+import random
+import numpy as np
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -468,6 +470,7 @@ def read_metadata(file_path='./metadata.json'):
     except Exception as e:
         print(f"读取文件时发生错误: {str(e)}")
         return {}, 0
+
 def main():
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="按分类号搜索CNKI并保存结果为NDJSON格式")
@@ -477,63 +480,93 @@ def main():
     parser.add_argument("-p", "--page", type=int, default=1, help="起始页码，默认为1")
     parser.add_argument("-n", "--pages-per-category", type=int, default=5, help="每个分类抓取的页数，默认为5。设为-1表示抓取全部页面")
     parser.add_argument("-z", "--page-size", type=int, default=50, help="每页结果数，默认为50")
-    
+    parser.add_argument("-t", "--category", action="store_true", help="指定JSON配置文件的路径")
+    parser.add_argument("--total-pages", type=int, default=None, help="指定总共要抓取的页数，默认为None，表示由pages-per-category决定")
+
     # 解析命令行参数
     args = parser.parse_args()
-    
+
     # 读取配置文件
     config = read_config(args.config)
-
+    
     # 读取数据并计算总数
     sci_data, total_count = read_metadata(args.metadata)
     
     # 打印结果
     print(f"总文章数量: {total_count}")
     
-    # 按文章数量排序的所有分类
+    # 按文章数量排序的所有分类 
     print("\n按文章数量排序的分类:")
     sorted_categories = sorted(sci_data.items(), key=lambda x: x[1]['size'], reverse=True)
     
-    for i, (code, info) in enumerate(sorted_categories, 1):
-        category_size = info['size']
+    # 计算权重 - 使用分类大小作为权重
+    categories = []
+    weights = []
+    
+    for code, info in sorted_categories:
+        if "T" not in code:
+            continue
+        
+        categories.append((code, info))
+        weights.append(info['size'])
+    
+    # 归一化权重
+    weights = np.array(weights, dtype=float)
+    weights = weights / weights.sum()
+    
+    # 显示所有分类及其权重
+    for i, ((code, info), weight) in enumerate(zip(categories, weights), 1):
+        print(f"{i}. {code}: {info['name']} - {info['size']}篇 (权重: {weight:.4f})")
+    
+    # 总页数计数器
+    total_pages_fetched = 0
+    
+    # 确定总共要抓取的页数
+    max_pages = args.total_pages if args.total_pages is not None else args.pages_per_category * len(categories)
+    
+    # 当尚未达到总页数要求时，继续抓取
+    while total_pages_fetched < max_pages:
+        # 使用权重随机选择一个分类
+        selected_idx = np.random.choice(len(categories), p=weights)
+        code, info = categories[selected_idx]
+        
+        print(f"\n随机选择分类: {code}: {info['name']} (权重: {weights[selected_idx]:.4f})")
         
         # 计算该分类的最大页数（每页50条记录）
-        max_pages = (category_size + args.page_size - 1) // args.page_size
+        category_size = info['size']
+        max_category_pages = (category_size + args.page_size - 1) // args.page_size
         
-        # 确定要抓取的页数
-        if args.pages_per_category == -1:
-            # 如果pages_per_category为-1，抓取全部页面
-            pages_to_fetch = max_pages
-        else:
-            # 否则，取指定页数和最大页数的较小值
-            pages_to_fetch = min(args.pages_per_category, max_pages)
+        # 随机选择一个页码
+        random_page = random.randint(args.page, min(max_category_pages, args.page + 100))
         
-        print(f"{i}. {code}: {info['name']} - {category_size}篇 (最大页数: {max_pages}, 计划抓取: {pages_to_fetch}页)")
+        print(f"开始抓取分类 {code} ({info['name']}) 第 {random_page} 页")
         
-
-        # 对每个分类，抓取指定数量的页面
-        total_publications = 0
-        for page_offset in range(pages_to_fetch):
-            current_page = args.page + page_offset
-            print(f"\n开始抓取分类 {code} ({info['name']}) 第 {current_page} 页 (总进度: {page_offset+1}/{pages_to_fetch})")
-            
-            # 搜索并保存，获取是否实际发送了请求的标志
-            publications, made_request = search_and_save(code, config, args.sci, current_page, args.page_size)
-            
-            total_publications += len(publications)
-            
-            # 如果当前页没有结果，认为已到最后一页，停止抓取此分类
-            if len(publications) == 0:
-                print(f"分类 {code} 没有更多结果，停止抓取")
-                break
-            
-            # 只有在实际发送了请求并且不是最后一页的情况下才进行延迟
-            if made_request and page_offset < pages_to_fetch - 1 and len(publications) > 0:
-                delay = random.uniform(2, 5)  # 随机延迟2-5秒
-                print(f"等待 {delay:.2f} 秒后继续...")
-                time.sleep(delay)
+        # 搜索并保存，获取是否实际发送了请求的标志
+        publications, made_request = search_and_save(code, config, args.sci, random_page, args.page_size)
         
-    
-    print("\n所有分类抓取完成!")
+        # 增加计数器
+        if len(publications) > 0:
+            total_pages_fetched += 1
+            print(f"总进度: {total_pages_fetched}/{max_pages}")
+        
+        # 如果当前页没有结果，可能需要调整该分类的权重
+        if len(publications) == 0:
+            print(f"分类 {code} 在页 {random_page} 没有结果")
+            # 可选：降低该分类的权重
+            weights[selected_idx] *= 0.8
+            # 重新归一化权重
+            weights = weights / weights.sum()
+        
+        # 延迟，避免请求过于频繁
+        if made_request and total_pages_fetched < max_pages and len(publications) > 0:
+            delay = random.uniform(2, 5)  # 随机延迟2-5秒
+            print(f"等待 {delay:.2f} 秒后继续...")
+            time.sleep(delay)
+            
+            # 每抓取10页后，休息较长时间
+            if total_pages_fetched % 10 == 0:
+                long_delay = random.uniform(300, 600)  # 5-10分钟
+                print(f"已抓取{total_pages_fetched}页，休息 {long_delay/60:.1f} 分钟...")
+                time.sleep(long_delay)
 if __name__ == "__main__":
     main()
