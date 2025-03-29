@@ -7,7 +7,9 @@
 
 #KILL python dump_site_3.py -c config/1.json
 PROCESS_ID=$(ps aux | grep "python dump_site_3.py" | grep -v grep | awk '{print $2}')
-kill $PROCESS_ID
+if [ -n "$PROCESS_ID" ]; then
+    kill -s 9 $PROCESS_ID
+fi
 
 DATE_STR=$(date +"%Y-%m-%d-%H-%M-%S")
 
