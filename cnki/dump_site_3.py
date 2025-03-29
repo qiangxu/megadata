@@ -139,7 +139,16 @@ def download_php(php_url, cookies):
             print("疑似超时", json_response.text)
             raise requests.exceptions.Timeout()
 
-def download_pdf(url, cookies, file_dir, file_prefix):
+def gen_safe_filepath(file_dir, title, authors, date):
+
+    os.makedirs(file_dir, exist_ok=True)
+
+    # 解码URL编码的字符串
+    file_name = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', "%s_%s_%s" % (date, authors, urllib.parse.unquote(urllib.parse.quote(title, safe='()/:?=&'), encoding='utf-8').split('/')[-1])).split(".PDF")[0][0:200] + ".pdf"
+
+    return Path(file_dir) / file_name
+
+def download_pdf(url, cookies, file_path):
     # 获取URL
 
     try:
@@ -163,26 +172,14 @@ def download_pdf(url, cookies, file_dir, file_prefix):
         # print(f"文件内容类型: {content_type}")
         
         if 'application/pdf' in content_type.lower() or 'application/octet-stream' in content_type.lower() or content_disposition.upper().endswith('.PDF'):
-            assert "FILENAME*=UTF" in content_disposition.upper()
+            if not os.path.exists(file_path):
+                with open(file_path, 'wb') as f:
+                    for chunk in pdf_response.iter_content(chunk_size=8192):
+                        f.write(chunk)
 
-            encoded_str = content_disposition.upper().split("FILENAME*=UTF-8''")[-1]
-
-            # 解码URL编码的字符串
-            filename = urllib.parse.unquote(encoded_str, encoding='utf-8')
-            filename = file_prefix + filename.split('/')[-1]
-            
-            safe_filename = re.sub(r'[^\w\u4e00-\u9fa5\.\-]', '_', filename)
-            assert safe_filename.endswith('.PDF')
-            safe_filename = safe_filename.split(".PDF")[0][0:200] + ".pdf"
-
-            # 保存PDF
-            filepath = Path(file_dir) / safe_filename
-
-            with open(filepath, 'wb') as f:
-                for chunk in pdf_response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            print("PDF 成功下载!")
+                print("PDF 成功下载!")
+            else: 
+                print("PDF 已存在!")
             return -1
         else: 
             print(f"下载失败，响应不是PDF。内容类型: {content_type}")
@@ -198,15 +195,18 @@ def download_pdf(url, cookies, file_dir, file_prefix):
         return 1
     except Exception as e: 
         if "RELIABILITY_ERROR" in str(e): 
-            print("稍后再试", e)
+            print("稍后再试, 延长SLEEP", e)
             return 4000
         if "AUTH_EXPIRED" in str(e): 
-            print("认证超时", e)
+            print("认证超时, 换COOKIES", e)
             return 5000
         if "Remote end closed connection without response" in str(e):
             print("连接超时", e)
             return 3000
-        breakpoint()
+        if "EOF occurred" in str(e): 
+            print("网络断开", e)
+            return 3000
+
         print("Unknown Error:", e)
         return 9000
 
@@ -254,17 +254,21 @@ def exec_dump_task(config_file):
     for count in tqdm(range(len(to_download_url_index))): 
         url_idx = to_download_url_index[count]
         url = df_state.loc[url_idx]['url']
+        title = df_state.loc[url_idx]['title'] 
         authors = df_state.loc[url_idx]['authors']
         date = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%Y-%m-%d')
         month = pd.to_datetime(df_state.loc[url_idx]['date']).strftime('%m')
         category = df_state.loc[url_idx]['category']
 
-        file_prefix = "%s_%s_" % (date, authors)
         file_dir = os.path.join(output_dir, category, month)
-        os.makedirs(file_dir, exist_ok=True)
+        file_path = gen_safe_filepath(file_dir, title, authors, date)
+
+        if os.path.exists(file_path):
+            print("PDF 已存在!")
+            df_state.loc[url_idx, 'downloaded'] = downloaded
 
         try:
-            downloaded = download_pdf(url, cookies, file_dir, file_prefix)
+            downloaded = download_pdf(url, cookies, file_path)
             # 更新状态
             if downloaded == -1 or downloaded == 0: 
                 df_state.loc[url_idx, 'downloaded'] = downloaded
@@ -279,12 +283,13 @@ def exec_dump_task(config_file):
 
             if count % 10 == 0:
                 cookies = reload_cookies(config_file)
+                save_state(df_state)
                 print("COOKIES RELOADED /STATE SAVED, %s" % cookies)
 
             if count % 30 == 0:
-                save_state(df_state)
+                pass
 
-            delay = random.uniform(3, 5)  # 随机延迟2-5秒
+            delay = random.uniform(6, 10)  # 随机延迟2-5秒
             print(f"等待 {delay:.2f} 秒后继续...")
             time.sleep(delay)
     
