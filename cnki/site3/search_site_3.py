@@ -19,9 +19,21 @@ import random
 from requests_toolbelt.utils import dump
 import random
 import numpy as np
+import base64
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+SEARCH_TARGET_URLS = {
+    2: "http://124.222.211.12:3344/kns8s/brief/grid",
+    3: "http://222.186.61.87:8085/kns8s/brief/grid"
+        }
+REFERERS = {
+    2: "http://124.222.211.12:3344/kns8/defaultresult/index",
+    3: "http://222.186.61.87:8085/kns8s/defaultresult/index",
+        }
 
 def read_config(config_file):
     """
@@ -34,8 +46,15 @@ def read_config(config_file):
         dict: 解析后的配置数据
     """
     try:
+        CNF_DIR = os.path.dirname(os.path.abspath(config_file))
         with open(config_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            config = json.load(f)
+            config["ndjson_dir"] = str(Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve())
+            config["output_dir"] = str(Path(os.path.join(CNF_DIR, config['output_dir'])).resolve())
+
+            os.makedirs(config["ndjson_dir"], exist_ok=True)
+            os.makedirs(config["output_dir"], exist_ok=True)
+            return config
     except FileNotFoundError:
         print(f"错误: 找不到配置文件 '{config_file}'")
         sys.exit(1)
@@ -46,7 +65,8 @@ def read_config(config_file):
         print(f"错误: 读取配置文件时发生错误: {str(e)}")
         sys.exit(1)
 
-def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=True, cookies=None):
+
+def search_cnki_by_category(site_id, category_code, page=1, page_size=50, sci_only=True, cookies=None):
     """
     按分类号搜索中国知网(CNKI)并获取结果
     
@@ -61,7 +81,7 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=True, 
     str: HTML格式的搜索结果
     """
     # CNKI搜索API地址
-    url = "http://222.186.61.87:8085/kns8s/brief/grid"
+    url = SEARCH_TARGET_URLS[site_id]
     # 构建查询JSON
     query_json = {
         # 平台标识，通常为空字符串，可选
@@ -186,7 +206,7 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=True, 
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
-        "Referer": "http://222.186.61.87:8085/kns8s/defaultresult/index"
+        "Referer": REFERERS[site_id]
     }
     
     # 发送HTTP请求
@@ -199,7 +219,7 @@ def search_cnki_by_category(category_code, page=1, page_size=50, sci_only=True, 
         print(f"请求URL: {url}")
         print(f"请求参数: {data}")
         return ""
-def extract_publications(html_content, category_code):
+def extract_publications(site_id, html_content, category_code):
     """
     从HTML响应中提取出版物信息，并转换链接格式
     
@@ -271,20 +291,13 @@ def extract_publications(html_content, category_code):
             # 构建下载链接
             download_link = None
             if orig_url and '?' in orig_url:
-                # 获取查询参数部分 - 确保保持原始编码格式
-                query_part = orig_url.split('?')[1]
-                
-                # 替换&为&amp;以匹配JavaScript行为
-                query_part = query_part.replace('&', '&amp;')
-                
-                # 构建ddata参数 - 使用原始的URL编码函数，不对:进行编码
-                #f"{filename}|{dbname}|{title}||{source}|{date}"
+                if site_id == 3:
+                    download_link = convert_download_url_site_3(orig_url, filename, dbname, title, authors, source, date)
+                elif site_id == 2: 
+                    download_link = convert_download_url_site_2(orig_url, filename, dbname, title, authors, source, date)
+                else: 
+                    breakpoint()
 
-                ddata_str_encoded = "|".join([urllib.parse.quote(filename, safe='()/:?=&'), urllib.parse.quote(dbname, safe='()/:?=&'), urllib.parse.quote(title, safe='()'), urllib.parse.quote("", safe='()/:?=&'), urllib.parse.quote(source, safe='()/:?=&'), urllib.parse.quote(date, safe='()/:?=&')])
-                
-                # 构建新URL
-                download_link = f"https://api1.sjuku.top/download.php?{query_part}&amp;ddata={ddata_str_encoded}"
-           	
                 publications.append({
                     'title': title,
                     'authors': ','.join(authors),
@@ -375,7 +388,8 @@ def check_existing_file(ndjson_dir, category_code, page):
     valid_records = sum(1 for record in records if record.get('url'))
     
     return True, matching_files, valid_records
-def search_and_save(category_code, config, sci_only=True, page=1, page_size=50):
+
+def search_and_save(site_id, category_code, config, sci_only=True, page=1, page_size=50):
     """
     按分类号搜索CNKI并保存结果
     
@@ -424,10 +438,10 @@ def search_and_save(category_code, config, sci_only=True, page=1, page_size=50):
                 key, value = item.strip().split('=', 1)
                 cookies[key] = value
     # 搜索CNKI
-    html_content = search_cnki_by_category(category_code, page, page_size, sci_only, cookies)
+    html_content = search_cnki_by_category(site_id, category_code, page, page_size, sci_only, cookies)
     
     # 提取出版物信息
-    publications = extract_publications(html_content, category_code)
+    publications = extract_publications(site_id, html_content, category_code)
     
     # 保存为NDJSON
     if publications:
@@ -454,12 +468,12 @@ def read_metadata(file_path='./metadata.json'):
             data = json.load(file)
         
         # 获取SCI分类数据
-        sci_data = data.get('SCI', {})
+        categories_data = data.get('SCI', {})
         
         # 计算总文章数量
-        total_articles = sum(category['size'] for category in sci_data.values())
+        total_articles = sum(category['size'] for category in categories_data.values())
         
-        return sci_data, total_articles
+        return categories_data, total_articles
     
     except FileNotFoundError:
         print(f"错误: 文件 '{file_path}' 未找到")
@@ -471,102 +485,204 @@ def read_metadata(file_path='./metadata.json'):
         print(f"读取文件时发生错误: {str(e)}")
         return {}, 0
 
-def main():
-    # 创建命令行参数解析器
-    parser = argparse.ArgumentParser(description="按分类号搜索CNKI并保存结果为NDJSON格式")
-    parser.add_argument("-c", "--config", required=True, help="指定JSON配置文件的路径")
-    parser.add_argument("-s", "--sci", action="store_true", help="只搜索SCI收录的文献")
-    parser.add_argument("-m", "--metadata", default="./metadata.json", help="指定metadata.json文件路径")
-    parser.add_argument("-p", "--page", type=int, default=1, help="起始页码，默认为1")
-    parser.add_argument("-n", "--pages-per-category", type=int, default=5, help="每个分类抓取的页数，默认为5。设为-1表示抓取全部页面")
-    parser.add_argument("-z", "--page-size", type=int, default=50, help="每页结果数，默认为50")
-    parser.add_argument("-t", "--category", action="store_true", help="指定JSON配置文件的路径")
-    parser.add_argument("--total-pages", type=int, default=None, help="指定总共要抓取的页数，默认为None，表示由pages-per-category决定")
-
-    # 解析命令行参数
-    args = parser.parse_args()
-
-    # 读取配置文件
-    config = read_config(args.config)
+def generate_timestamp_with_check():
+    """
+    生成带校验和的时间戳，模拟JavaScript中的generateTimestampWithCheck函数
+    """
+    timestamp = str(int(time.time() * 1000))
+    # 获取时间戳后三位的数字
+    last_three = timestamp[-4:-1]
     
+    # 计算各位数字之和
+    digit_sum = sum(int(digit) for digit in last_three)
+    
+    # 计算校验和 (数字之和模10)
+    checksum = digit_sum % 10
+    
+    # 将校验和附加到时间戳末尾
+    timestamp = timestamp[:-1] + str(checksum)
+    
+    return timestamp
+
+def encrypt(data, key):
+    """
+    使用AES-ECB加密，模拟JavaScript中的encrypt函数
+    """
+    if not isinstance(data, str):
+        data = json.dumps(data)
+    
+    # 将key转换为bytes
+    key_bytes = key.encode('utf-8')
+    
+    # 使用AES-ECB模式加密
+    cipher = AES.new(key_bytes, AES.MODE_ECB)
+    
+    # 填充数据并加密
+    padded_data = pad(data.encode('utf-8'), AES.block_size)
+    encrypted = cipher.encrypt(padded_data)
+    
+    # 返回Base64编码的结果
+    return base64.b64encode(encrypted).decode('utf-8')
+
+def convert_download_url_site_3(orig_url, file_id, db_name, title, authors, source, pub_date): 
+    # 获取查询参数部分 - 确保保持原始编码格式
+    query_part = orig_url.split('?')[1]
+    
+    # 替换&为&amp;以匹配JavaScript行为
+    query_part = query_part.replace('&', '&amp;')
+    
+    # 构建ddata参数 - 使用原始的URL编码函数，不对:进行编码
+    #f"{file_id}|{db_name}|{title}||{source}|{pub_date}"
+
+    ddata_str_encoded = "|".join([urllib.parse.quote(file_id, safe='()/:?=&'), urllib.parse.quote(db_name, safe='()/:?=&'), urllib.parse.quote(title, safe='()'), urllib.parse.quote("", safe='()/:?=&'), urllib.parse.quote(source, safe='()/:?=&'), urllib.parse.quote(pub_date, safe='()/:?=&')])
+    
+    # 构建新URL
+    download_url = f"https://api1.sjuku.top/download.php?{query_part}&amp;ddata={ddata_str_encoded}"
+    return download_url
+
+def convert_download_url_site_2(orig_url, file_id=None, db_name=None, title=None, authors=[], source=None, pub_date=None):
+    """
+    将CNKI原始URL转换为加密的下载URL
+    
+    Args:
+        orig_url: 原始CNKI URL，例如https://kns.cnki.net/kcms2/article/abstract?v=...
+        file_id: 文件ID，例如HJJZ20250328001
+        db_name: 数据库名称，例如CAPJ
+        pub_date: 发布日期，例如2025-03-28 17:16
+    
+    Returns:
+        加密的下载URL
+    """
+    # 提取URL中的v参数
+    match = re.search(r'v=([^&]+)', orig_url)
+    if not match:
+        raise ValueError("无法从URL中提取v参数")
+    
+    v_param = match.group(1)
+    
+    # 进行解码处理（因为URL可能是编码过的）
+    v_param = v_param.replace('&amp;', '&')
+    
+    # 使用固定密钥加密数据
+    encryption_key = "Q5vGEmoCW59MW4Bc"  # 从JavaScript代码中提取的密钥
+    encrypted_data = encrypt(v_param, encryption_key)
+    
+    # 生成带校验和的时间戳
+    timestamp = generate_timestamp_with_check()
+    
+    # 构建下载URL
+    download_url = (f"https://api88.wenxian.shop/v1/api/download?dflag=pdfdown&v={encrypted_data}")
+    
+    # 添加可选参数
+    if file_id:
+        download_url += f"&fileid={file_id}"
+    if db_name:
+        download_url += f"&dataDbname={db_name}"
+    if pub_date:
+        # URL编码空格
+        encoded_date = pub_date.replace(' ', '%20')
+        download_url += f"&pd={encoded_date}"
+    
+    # 添加时间戳
+    download_url += f"&t={timestamp}"
+    
+    return download_url
+
+def random_page(site_id, num_pages, config, page_size=50, sci_only=True, metadata="./metadata.json"):
     # 读取数据并计算总数
-    sci_data, total_count = read_metadata(args.metadata)
+    categories_data, total_count = read_metadata(metadata)
     
     # 打印结果
     print(f"总文章数量: {total_count}")
     
     # 按文章数量排序的所有分类 
     print("\n按文章数量排序的分类:")
-    sorted_categories = sorted(sci_data.items(), key=lambda x: x[1]['size'], reverse=True)
+    sorted_categories = sorted(categories_data.items(), key=lambda x: x[1]['size'], reverse=True)
     
     # 计算权重 - 使用分类大小作为权重
     categories = []
     weights = []
     
-    for code, info in sorted_categories:
-        if "T" not in code:
-            continue
+    for category_code, category_info in sorted_categories:
         
-        categories.append((code, info))
-        weights.append(info['size'])
+        categories.append((category_code, category_info))
+        weights.append(category_info['size'])
     
     # 归一化权重
     weights = np.array(weights, dtype=float)
     weights = weights / weights.sum()
     
     # 显示所有分类及其权重
-    for i, ((code, info), weight) in enumerate(zip(categories, weights), 1):
-        print(f"{i}. {code}: {info['name']} - {info['size']}篇 (权重: {weight:.4f})")
+    for i, ((category_code, category_info), weight) in enumerate(zip(categories, weights), 1):
+        print(f"{i}. {category_code}: {category_info['name']} - {category_info['size']}篇 (权重: {weight:.4f})")
     
     # 总页数计数器
-    total_pages_fetched = 0
-    
-    # 确定总共要抓取的页数
-    max_pages = args.total_pages if args.total_pages is not None else args.pages_per_category * len(categories)
+    num_pages_feteched = 0
     
     # 当尚未达到总页数要求时，继续抓取
-    while total_pages_fetched < max_pages:
+    while num_pages_feteched < num_pages:
         # 使用权重随机选择一个分类
-        selected_idx = np.random.choice(len(categories), p=weights)
-        code, info = categories[selected_idx]
+        random_category_idx = np.random.choice(len(categories), p=weights)
+        category_code, category_info = categories[random_category_idx]
         
-        print(f"\n随机选择分类: {code}: {info['name']} (权重: {weights[selected_idx]:.4f})")
+        print(f"\n随机选择分类: {category_code}: {category_info['name']} (权重: {weights[random_category_idx]:.4f})")
         
-        # 计算该分类的最大页数（每页50条记录）
-        category_size = info['size']
-        max_category_pages = (category_size + args.page_size - 1) // args.page_size
+        # 计算该分类的最大页数（每页50条记录） 随机选择一个页码
+        random_page = random.randint(1, (category_info['size'] + page_size - 1) // page_size)
         
-        # 随机选择一个页码
-        random_page = random.randint(args.page, min(max_category_pages, args.page + 100))
-        
-        print(f"开始抓取分类 {code} ({info['name']}) 第 {random_page} 页")
+        print(f"开始抓取分类 {category_code} ({category_info['name']}) 第 {random_page} 页")
         
         # 搜索并保存，获取是否实际发送了请求的标志
-        publications, made_request = search_and_save(code, config, args.sci, random_page, args.page_size)
+        publications, not_cached = search_and_save(site_id, category_code, config, sci_only, random_page, page_size)
         
         # 增加计数器
         if len(publications) > 0:
-            total_pages_fetched += 1
-            print(f"总进度: {total_pages_fetched}/{max_pages}")
-        
-        # 如果当前页没有结果，可能需要调整该分类的权重
-        if len(publications) == 0:
-            print(f"分类 {code} 在页 {random_page} 没有结果")
-            # 可选：降低该分类的权重
-            weights[selected_idx] *= 0.8
-            # 重新归一化权重
-            weights = weights / weights.sum()
-        
+            num_pages_feteched += 1
+            print(f"总进度: {num_pages_feteched}/{num_pages}")
+               
         # 延迟，避免请求过于频繁
-        if made_request and total_pages_fetched < max_pages and len(publications) > 0:
+        if not_cached and num_pages_feteched < num_pages and len(publications) > 0:
             delay = random.uniform(2, 5)  # 随机延迟2-5秒
             print(f"等待 {delay:.2f} 秒后继续...")
             time.sleep(delay)
             
-            # 每抓取10页后，休息较长时间
-            if total_pages_fetched % 10 == 0:
-                long_delay = random.uniform(300, 600)  # 5-10分钟
-                print(f"已抓取{total_pages_fetched}页，休息 {long_delay/60:.1f} 分钟...")
-                time.sleep(long_delay)
+# 示例使用
+"""
+if __name__ == "__main__":
+    # 示例原始URL
+    breakpoint()
+    original_url = "https://kns.cnki.net/kcms2/article/abstract?v=aR5N6Ks7Vo3RGDDNBJroVO7oWxEMUMYGd6ZUo5ii1rQ6kj6S3UXiBtvTZOgKO9BeMEK5q7iQxVCFe38_NNzQ4wlQoCBrGY5w5x-Mkwt6FukHk5r25NiT5Bagvha9ZHOCxP09h-5gK3BOn2H5L4KbWZY6ad2i4mIhUVzQJ4M-LF1uMjr9Rq6Pez4-21Ru7ZqU&uniplatform=NZKPT&language=CHS"
+    
+    # 其他参数
+    file_id = "HJJZ20250328001"
+    db_name = "CAPJ"
+    pub_date = "2025-03-28 17:16"
+    
+    # 转换URL
+    download_url = convert_cnki_url(original_url, file_id, db_name, pub_date)
+    print("原始URL:", original_url)
+    print("转换后的下载URL:", download_url)
+"""
+
+def main():
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(description="按分类号搜索CNKI并保存结果为NDJSON格式")
+    parser.add_argument("-c", "--config", required=True, help="指定JSON配置文件的路径")
+    parser.add_argument("-S", "--sci", action="store_true", help="只搜索SCI收录的文献")
+    parser.add_argument("-s", "--site-id", type=int, default=2, help="只搜索SCI收录的文献")
+    parser.add_argument("-m", "--metadata", default="./metadata.json", help="指定metadata.json文件路径")
+    parser.add_argument("-p", "--page", type=int, default=1, help="起始页码，默认为1")
+    parser.add_argument("-n", "--pages-per-category", type=int, default=5, help="每个分类抓取的页数，默认为5。设为-1表示抓取全部页面")
+    parser.add_argument("-z", "--page-size", type=int, default=50, help="每页结果数，默认为50")
+    parser.add_argument("-C", "--category-code", action="store_true", help="指定JSON配置文件的路径")
+    parser.add_argument("-t", "--total-pages", type=int, default=None, help="指定总共要抓取的页数，默认为None，表示由pages-per-category决定")
+
+    # 解析命令行参数
+    args = parser.parse_args()
+
+    # 读取配置文件
+    config = read_config(args.config)
+    random_page(args.site_id, args.total_pages, config, args.page_size, args.sci, args.metadata)
+    #publications, not_cached = search_and_save(args.site_id, "N1", config, False, 1, 50)
 if __name__ == "__main__":
     main()
