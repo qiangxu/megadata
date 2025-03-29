@@ -133,7 +133,7 @@ def extract_pdf_url_site3(url, cookies):
             raise Exception("BUG", json_data)
 
     except requests.exceptions.JSONDecodeError as e:
-        breakpoint()
+        # breakpoint()
         if "Couldn\'t fetch mysqli" in json_response.text:
             raise Exception("OVERLOAD", json_response.text)
         if "授权已超时，请重新进入" in json_response.text:

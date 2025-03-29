@@ -115,7 +115,7 @@ def process_ndjson_files(df_state, ndjson_dir):
 
     return df_state
 
-def extract_pdf_url_site1(url, cookies):
+def extract_pdf_url_site3(url, cookies):
     try:     
         json_url = url.replace("download.php", "download2.php")
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES)
@@ -155,11 +155,10 @@ def gen_safe_filepath(file_dir, title, authors, date):
 
 def download_pdf(url, cookies, file_path):
     # 获取URL
-    breakpoint()
     try:
         if "download.php" in url: 
             # PHP -> JSON -> PDF
-            pdf_url = extract_pdf_url_site1(url, cookies)
+            pdf_url = extract_pdf_url_site3(url, cookies)
         elif "api88.wenxian.shop/v1/api/download?" in url:
             pdf_url, _, _, remaining_seconds = extract_pdf_url_site2(url, cookies)
         else:
@@ -230,12 +229,13 @@ def read_config(config_file):
         CNF_DIR = os.path.dirname(os.path.abspath(config_file))
         with open(config_file, "r", encoding="utf-8") as f:
             config = json.load(f)
-            config["ndjson_dir"] = Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve()
-            config["output_dir"] = Path(os.path.join(CNF_DIR, config['output_dir'])).resolve()
+            config["ndjson_dir"] = str(Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve())
+            config["output_dir"] = str(Path(os.path.join(CNF_DIR, config['output_dir'])).resolve())
 
             os.makedirs(config["ndjson_dir"], exist_ok=True)
             os.makedirs(config["output_dir"], exist_ok=True)
             return config
+
     except FileNotFoundError:
         print(f"错误: 找不到配置文件 '{config_file}'")
         sys.exit(1)
