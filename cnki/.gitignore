@@ -5,3 +5,4 @@ data/*
 bak/*.json
 site[0-9]/links
 site[0-9]/data
+site[0-9]/state.json
