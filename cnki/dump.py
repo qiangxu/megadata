@@ -22,15 +22,6 @@ from datetime import datetime
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-"""
-# 隧道域名:端口号
-TUNNEL = "q945.kdltps.com:15818"
-
-# 用户名密码方式
-USERNAME = "t14319390139362"
-PASSWORD = "ngvczjx6"
-PROXIES = { "http": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": USERNAME, "pwd": PASSWORD, "proxy": TUNNEL}, "https": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": USERNAME, "pwd": PASSWORD, "proxy": TUNNEL} }
-"""
 
 HEADERS = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -49,10 +40,6 @@ PAPER_KEYS = [
         ]
 STATE_KEYS = ['ndjson', 'downloaded']
 
-EXE_DIR = os.path.dirname(os.path.abspath(__file__))
-print(f"当前脚本目录: {EXE_DIR}")
-
-STATE_FILE = os.path.join(EXE_DIR, "state.json")
 
 def custom_date_parser(date_str):
     try:
@@ -72,19 +59,19 @@ def custom_date_parser(date_str):
             # 其他情况返回NaT或抛出异常
             return pd.to_datetime("19700101", format="%Y%m%d") 
 
-def load_state():
+def load_state(state_file):
     """加载或创建状态DataFrame"""
-    if os.path.exists(STATE_FILE):
-        df = pd.read_json(STATE_FILE, lines=True, orient="records")[PAPER_KEYS + STATE_KEYS]
+    if os.path.exists(state_file):
+        df = pd.read_json(state_file, lines=True, orient="records")[PAPER_KEYS + STATE_KEYS]
         df['date'] = pd.to_datetime(df['date'], unit='ms')
         return df
     return pd.DataFrame(columns=PAPER_KEYS + STATE_KEYS)
 
-def save_state(df_state):
+def save_state(df_state, state_file):
     """保存状态DataFrame到硬盘(ndjson格式)"""
-    df_state.to_json(STATE_FILE, lines=True, orient="records", force_ascii=False)
+    df_state.to_json(state_file, lines=True, orient="records", force_ascii=False)
 
-def process_ndjson_files(df_state, ndjson_dir):
+def process_ndjson_files(df_state, ndjson_dir, state_file):
     """处理ndjson文件并更新状态"""
     # 获取已处理文件
     exist_ndjson_files = set(df_state['ndjson'].unique())
@@ -105,25 +92,25 @@ def process_ndjson_files(df_state, ndjson_dir):
     if len(df_state) > 0: 
         if len(df_update) > 0:
             df_state = pd.concat([df_state, df_update], ignore_index=True).sort_values(['title', 'authors', 'source', 'date', 'downloaded', 'ndjson'], ascending=[True, True, True, True, False, True]).drop_duplicates(['title', 'authors', 'source', 'date'], keep='last')
-            save_state(df_state)
+            save_state(df_state, state_file)
             print(f"MERGED {len(df_update)}条新记录")
         else: 
             pass
     else: 
         if len(df_update) > 0:
-            save_state(df_update)
+            save_state(df_update, state_file)
             return df_update.copy()
         else: 
             return df_state
 
     return df_state
 
-def extract_pdf_url_site3(url, cookies):
+def extract_pdf_url_site3(url, cookies, proxy=None):
     try:     
         json_url = url.replace("download.php", "download2.php")
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES)
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=10)
-        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=60)
+        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=60, proxies=proxy)
 
         json_data = json_response.json()
         if 'url' in json_data:
@@ -156,12 +143,12 @@ def gen_safe_filepath(file_dir, title, authors, date):
 
     return Path(file_dir) / file_name
 
-def download_pdf(url, cookies, file_path):
+def download_pdf(url, cookies, file_path, proxy=None):
     # 获取URL
     try:
         if "download.php" in url: 
             # PHP -> JSON -> PDF
-            pdf_url = extract_pdf_url_site3(url, cookies)
+            pdf_url = extract_pdf_url_site3(url, cookies, proxy)
         elif "api88.wenxian.shop/v1/api/download?" in url:
             pdf_url, _, _, remaining_seconds = extract_pdf_url_site2(url, cookies)
         else:
@@ -170,7 +157,7 @@ def download_pdf(url, cookies, file_path):
         
         # 第二步：下载实际的文件
         #pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES, stream=True)
-        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, verify=False, stream=True)
+        pdf_response = requests.get(pdf_url, headers=HEADERS | {"Cookie": cookies}, verify=False, stream=True, proxies=proxy)
         
         # 检查内容类型
         content_type = pdf_response.headers.get('content-type', '')
@@ -221,7 +208,20 @@ def download_pdf(url, cookies, file_path):
         print("UNKNOWN:", e)
         return 9000
 
-def read_config(config_file):
+def gen_proxy(config):
+
+    # 获取API接口返回的代理IP
+    proxy_ips = sorted(requests.get(config['proxy_url']).text.split('\r\n'))
+    proxy_ip = proxy_ips[(int(config['var_id']) % len(proxy_ips))]
+
+    proxy = {
+        "http": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": config['username'], "pwd": config['password'], "proxy": proxy_ip},
+        "https": "http://%(user)s:%(pwd)s@%(proxy)s/" % {"user": config['username'], "pwd": config['password'], "proxy": proxy_ip}
+    }
+    
+    return proxy
+
+def read_config(config_file, update_proxy=False):
     """
     读取并解析 JSON 配置文件
 
@@ -237,9 +237,15 @@ def read_config(config_file):
             config = json.load(f)
             config["ndjson_dir"] = str(Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve())
             config["output_dir"] = str(Path(os.path.join(CNF_DIR, config['output_dir'])).resolve())
+            config["state_file"] = str(Path(os.path.join(CNF_DIR, config['state_file'])).resolve())
 
             os.makedirs(config["ndjson_dir"], exist_ok=True)
             os.makedirs(config["output_dir"], exist_ok=True)
+
+            if config['use_proxy'] == True:
+                config['proxy'] = gen_proxy(config)
+            else: 
+                config['proxy'] = None
             return config
 
     except FileNotFoundError:
@@ -257,14 +263,16 @@ def reload_cookies(config_file):
 
 def exec_dump_task(config_file): 
     # breakpoint()
-    config = read_config(config_file)
+    config = read_config(config_file, update_proxy=True)
     ndjson_dir = config["ndjson_dir"]
     cookies = config["dump_cookies"]
     output_dir = config['output_dir']
+    state_file = config['state_file']
+    proxy = config['proxy']
 
     # 加载状态
 
-    df_state = process_ndjson_files(load_state(), ndjson_dir)
+    df_state = process_ndjson_files(load_state(state_file), ndjson_dir, state_file)
 
     to_download_mask = (df_state['downloaded'] == 1) | (df_state['downloaded'] == 2000) | (df_state['downloaded'] == 4000)
     #| (df_state['downloaded'] == 2)
@@ -289,7 +297,7 @@ def exec_dump_task(config_file):
             df_state.loc[url_idx, 'downloaded'] = downloaded
 
         try:
-            downloaded = download_pdf(url, cookies, file_path)
+            downloaded = download_pdf(url, cookies, file_path, proxy)
             # 更新状态
             if downloaded == -1 or downloaded == 0: 
                 df_state.loc[url_idx, 'downloaded'] = downloaded
@@ -299,12 +307,12 @@ def exec_dump_task(config_file):
             elif downloaded in [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]: 
                 df_state.loc[url_idx, 'downloaded'] = downloaded
             else:
-                save_state(df_state)
+                save_state(df_state, state_file)
                 assert False
 
             if count % 10 == 0:
                 cookies = reload_cookies(config_file)
-                save_state(df_state)
+                save_state(df_state, state_file)
                 print("COOKIES RELOADED /STATE SAVED, %s" % cookies)
 
             if count % 30 == 0:
@@ -315,12 +323,12 @@ def exec_dump_task(config_file):
             time.sleep(delay)
     
         except Exception as e: 
-            save_state(df_state)
+            save_state(df_state, state_file)
             print("Unknown Error:", e)
             # breakpoint()
 
     if len(df_state) > 0:
-        save_state(df_state)
+        save_state(df_state, state_file)
 
 def extract_pdf_url_site2(url, cookies=None):
     """
