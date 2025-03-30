@@ -310,7 +310,7 @@ def exec_dump_task(config_file):
             if count % 30 == 0:
                 pass
 
-            delay = random.uniform(4, 8)  # 随机延迟2-5秒
+            delay = random.uniform(6, 9)  # 随机延迟2-5秒
             print(f"等待 {delay:.2f} 秒后继续...")
             time.sleep(delay)
     
