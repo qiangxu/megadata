@@ -1,9 +1,9 @@
 {
-    "var_id": 2,
+    "var_id": 3,
     "ndjson_dir": "../site8/links8.2/",
     "state_file": "../site8/state8.2.json",
-    "dump_cookies" : "PHPSESSID=hctv4krrc58vb3741asm0moni3",
-    "use_proxy": false,
+    "dump_cookies" : "PHPSESSID=vcjecm95991k61otidgq964n97",
+    "use_proxy": true,
     "proxy_url" : "https://kps.kdlapi.com/api/getkps/?secret_id=obdmhtsn9diit46bd37v&signature=inxy8od7iyxix3ndenixnc18h180o5n9&num=1&pt=1&sep=1",
     "username" : "elfnmntc",
     "password" : "kw2ivn8h",

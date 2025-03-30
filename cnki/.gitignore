@@ -3,6 +3,4 @@ data/*
 *.sw[A-Z]
 .DS_Store
 bak/*.json
-site[0-9]/links
-site[0-9]/data
-site[0-9]/state.json
+site[0-9]/*
