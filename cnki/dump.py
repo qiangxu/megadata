@@ -129,8 +129,7 @@ def process_ndjson_files(df_state, ndjson_dir, state_file):
 
     return df_state
 
-
-def extract_pdf_url_site3(url, cookies, proxy=None):
+def extract_pdf_url_site3_or_8(url, cookies, proxy=None):
     try:
         json_url = url.replace("download.php", "download2.php")
         # json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES)
@@ -191,7 +190,7 @@ def download_pdf(url, cookies, file_path, proxy=None):
     try:
         if "download.php" in url:
             # PHP -> JSON -> PDF
-            pdf_url = extract_pdf_url_site3(url, cookies, proxy)
+            pdf_url = extract_pdf_url_site3_or_8(url, cookies, proxy)
         elif "api88.wenxian.shop/v1/api/download?" in url:
             pdf_url, _, _, remaining_seconds = extract_pdf_url_site2(url, cookies)
         else:

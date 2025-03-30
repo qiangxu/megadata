@@ -29,10 +29,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SEARCH_TARGET_URLS = {
     2: "http://124.222.211.12:3344/kns8s/brief/grid",
     3: "http://222.186.61.87:8085/kns8s/brief/grid",
+    8: "http://222.186.61.87:8082/kns8s/brief/grid"
 }
 REFERERS = {
     2: "http://124.222.211.12:3344/kns8/defaultresult/index",
     3: "http://222.186.61.87:8085/kns8s/defaultresult/index",
+    8: "http://222.186.61.87:8082/kns8s/defaultresult/index"
 }
 
 
@@ -302,6 +304,10 @@ def extract_publications(site_id, html_content, category_code):
                     download_link = convert_download_url_site_2(
                         orig_url, filename, dbname, title, authors, source, date
                     )
+                elif site_id == 8:
+                    download_link = convert_download_url_site_8(
+                        orig_url, filename, dbname, title, authors, source, date
+                    )
                 else:
                     breakpoint()
 
@@ -550,6 +556,32 @@ def encrypt(data, key):
     # 返回Base64编码的结果
     return base64.b64encode(encrypted).decode("utf-8")
 
+def convert_download_url_site_8(
+    orig_url, file_id, db_name, title, authors, source, pub_date
+):
+    # 获取查询参数部分 - 确保保持原始编码格式
+    query_part = orig_url.split("?")[1]
+
+    # 替换&为&amp;以匹配JavaScript行为
+    query_part = query_part.replace("&", "&amp;")
+
+    # 构建ddata参数 - 使用原始的URL编码函数，不对:进行编码
+    # f"{file_id}|{db_name}|{title}||{source}|{pub_date}"
+
+    ddata_str_encoded = "|".join(
+        [
+            urllib.parse.quote(file_id, safe="()/:?=&"),
+            urllib.parse.quote(db_name, safe="()/:?=&"),
+            urllib.parse.quote(title, safe="()"),
+            urllib.parse.quote("", safe="()/:?=&"),
+            urllib.parse.quote(source, safe="()/:?=&"),
+            urllib.parse.quote(pub_date, safe="()/:?=&"),
+        ]
+    )
+
+    # 构建新URL
+    download_url = f"https://api2.sjuku.top/download.php?{query_part}&;ddata={ddata_str_encoded}"
+    return download_url
 
 def convert_download_url_site_3(
     orig_url, file_id, db_name, title, authors, source, pub_date
