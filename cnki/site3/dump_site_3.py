@@ -123,7 +123,7 @@ def extract_pdf_url_site3(url, cookies):
         json_url = url.replace("download.php", "download2.php")
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, proxies=PROXIES)
         #json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=10)
-        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies})
+        json_response = requests.get(json_url, headers=HEADERS | {"Cookie": cookies}, timeout=60)
 
         json_data = json_response.json()
         if 'url' in json_data:
