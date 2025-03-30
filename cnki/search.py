@@ -628,7 +628,7 @@ def random_page(site_id, num_pages, config, page_size=50, sci_only=True, metadat
         print(f"\n随机选择分类: {category_code}: {category_info['name']} (权重: {weights[random_category_idx]:.4f})")
         
         # 计算该分类的最大页数（每页50条记录） 随机选择一个页码
-        random_page = random.randint(1, (category_info['size'] + page_size - 1) // page_size)
+        random_page = random.randint(1, min((category_info['size'] + page_size - 1) // page_size, 300))
         
         print(f"开始抓取分类 {category_code} ({category_info['name']}) 第 {random_page} 页")
         
