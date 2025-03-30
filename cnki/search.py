@@ -688,14 +688,10 @@ def random_page(
         )
 
         # 计算该分类的最大页数（每页50条记录） 随机选择一个页码
-        random_page = random.randint(
-            1, (category_info["size"] + page_size - 1) // page_size
-        )
-
-        print(
-            f"开始抓取分类 {category_code} ({category_info['name']}) 第 {random_page} 页"
-        )
-
+        random_page = random.randint(1, min((category_info['size'] + page_size - 1) // page_size, 300))
+        
+        print(f"开始抓取分类 {category_code} ({category_info['name']}) 第 {random_page} 页")
+        
         # 搜索并保存，获取是否实际发送了请求的标志
         publications, not_cached = search_and_save(
             site_id, category_code, config, sci_only, random_page, page_size

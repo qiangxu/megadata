@@ -325,8 +325,7 @@ def read_config(config_file, update_proxy=False):
 def reload_cookies(config_file):
     return read_config(config_file)["dump_cookies"]
 
-
-def exec_dump_task(config_file):
+def exec_dump_task(config_file, sleep_interval=10): 
     # breakpoint()
     config = read_config(config_file, update_proxy=True)
     ndjson_dir = config["ndjson_dir"]
@@ -391,7 +390,7 @@ def exec_dump_task(config_file):
             if count % 30 == 0:
                 pass
 
-            delay = random.uniform(6, 9)  # 随机延迟2-5秒
+            delay = random.uniform(int(sleep_interval*0.7), int(sleep_interval*1.3))  # 随机延迟2-5秒
             print(f"等待 {delay:.2f} 秒后继续...")
             time.sleep(delay)
 
@@ -450,13 +449,13 @@ def main():
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="读取JSON配置文件")
     parser.add_argument("-c", "--config", required=False, help="指定JSON配置文件的路径")
-
+    parser.add_argument("-i", "--sleep-interval", type=int, default=10, help="指定间隔时间")
     # 解析命令行参数
     args = parser.parse_args()
 
     if args.config:
         # 读取配置文件
-        exec_dump_task(args.config)
+        exec_dump_task(args.config, args.sleep_interval)
 
 
 if __name__ == "__main__":
