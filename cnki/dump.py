@@ -137,7 +137,7 @@ def extract_pdf_url_site3_or_8(url, cookies, proxy=None):
         json_response = requests.get(
             json_url, headers=HEADERS | {"Cookie": cookies}, timeout=60, proxies=proxy
         )
-
+        
         json_data = json_response.json()
         if "url" in json_data:
             pdf_url = json_data["url"]
