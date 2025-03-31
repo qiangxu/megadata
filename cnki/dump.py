@@ -363,7 +363,7 @@ def exec_dump_task(config_file, sleep_interval=10):
 
         if os.path.exists(file_path):
             print("PDF 已存在!")
-            df_state.loc[url_idx, "downloaded"] = downloaded
+            df_state.loc[url_idx, "downloaded"] = -1
 
         try:
             downloaded = download_pdf(url, cookies, file_path, proxy)
