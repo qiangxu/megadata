@@ -104,7 +104,7 @@ echo "NDJSON目录: $NDJSON_DIR"
 echo "状态文件: $STATE_FILE"
 
 
-for j in {1..100}; do 
+for j in {1..500}; do 
 	# 删除NDJSON目录中的所有文件
 	if [ -d "$NDJSON_DIR" ]; then
 		echo "正在删除 $NDJSON_DIR 中的所有文件..."
@@ -125,9 +125,9 @@ for j in {1..100}; do
 
 	echo "清理操作完成"
 
-    for i in {1..10}; do
+    for i in {1..2}; do
         python search.py -c $CONFIG_FILE -S -s $SITE_ID -t 1 -z 20
-        python dump.py -c $CONFIG_FILE
-        python dump.py -c $CONFIG_FILE
+        python dump.py -c $CONFIG_FILE -i 20
+        python dump.py -c $CONFIG_FILE -i 20
     done
 done
