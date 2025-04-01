@@ -6,3 +6,9 @@
 python dump_site_3.py -c config/1.json 
 
 python search.py -c config/1.json -s --total-pages 2
+
+
+HOW TO USE DISABLE INSECURE DOWNLOAD WARNING:
+
+SET `chrome://flags/#temporary-unexpire-flags-m120` TO ENABLED.
+SET `chrome://flags/#insecure-download-warnings` TO DISABLED.
