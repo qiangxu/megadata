@@ -6,3 +6,7 @@
 python dump_site_3.py -c config/1.json 
 
 python search.py -c config/1.json -s --total-pages 2
+
+'''
+date  && echo "PDF文件数量: $(find ./ -name "*.pdf" | wc -l)" && echo "总大小: $(du -ch . | grep total | cut  -f 1)"
+'''

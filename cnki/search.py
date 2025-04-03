@@ -102,8 +102,8 @@ def search_cnki_by_category(
         "Classid": "WD0FTY92",
         # 具体产品列表，以逗号分隔的产品代码，在跨库搜索时必需
         # CJFQ(中文期刊)、CDFD(博士)、CMFD(硕士)、CAPJ(特色期刊)等
-        # "Products": "CJFQ,CAPJ,CJTL,CDFD,CMFD,CPFD,IPFD,CPVD,CCND,WBFD,SCSF,SCHF,SCSD,SNAD,CCJD,CJFN,CCVD",
-        "Products": "",
+        "Products": "CJFQ,CAPJ,CJTL,CDFD,CMFD,CPFD,IPFD,CPVD,CCND,WBFD,SCSF,SCHF,SCSD,SNAD,CCJD,CJFN,CCVD",
+        #"Products": "",
         # 查询节点，包含所有查询条件，必需
         "QNode": {
             # 查询组，包含一个或多个查询条件组，必需
