@@ -284,7 +284,7 @@ def crawl_account(fakeid, token=TOKEN, cookie=COOKIE):
             """
             #wb = extract_text_from_html(content).replace("\t", "").replace(" ", "")
             f.write(content + "\n")
-        time.sleep(random.randint(20, 50) / 10)
+        time.sleep(random.randint(600, 900) / 10)
     print(f"FAKEID: {fakeid} IS COMPLETED W/ {count} UPDATES")
     
     return count 

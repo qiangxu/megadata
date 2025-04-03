@@ -127,7 +127,7 @@ for j in {1..500}; do
 
     for i in {1..2}; do
         python search.py -c $CONFIG_FILE -S -s $SITE_ID -t 1 -z 20
-        python dump.py -c $CONFIG_FILE -i 20
-        python dump.py -c $CONFIG_FILE -i 20
+        python dump.py -c $CONFIG_FILE -i 10
+        python dump.py -c $CONFIG_FILE -i 10
     done
 done

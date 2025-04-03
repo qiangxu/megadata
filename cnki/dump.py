@@ -6,6 +6,7 @@ from tqdm import tqdm
 import argparse
 import glob
 import json
+import yaml
 import ndjson
 import os
 import pandas as pd
@@ -137,7 +138,7 @@ def extract_pdf_url_site3_or_8(url, cookies, proxy=None):
         json_response = requests.get(
             json_url, headers=HEADERS | {"Cookie": cookies}, timeout=60, proxies=proxy
         )
-
+        
         json_data = json_response.json()
         if "url" in json_data:
             pdf_url = json_data["url"]
@@ -287,10 +288,20 @@ def read_config(config_file, update_proxy=False):
     Returns:
         dict: 解析后的配置数据
     """
+    # 检查是否为YAML文件
+    is_yaml = config_file.lower().endswith(('.yaml', '.yml'))
+    
     try:
         CNF_DIR = os.path.dirname(os.path.abspath(config_file))
         with open(config_file, "r", encoding="utf-8") as f:
-            config = json.load(f)
+            if is_yaml:
+                # 解析YAML文件
+                config = yaml.safe_load(f)
+            else:
+                # 解析JSON文件
+                config = json.load(f)
+            
+            # 处理路径（两种格式通用）
             config["ndjson_dir"] = str(
                 Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve()
             )
@@ -300,21 +311,30 @@ def read_config(config_file, update_proxy=False):
             config["state_file"] = str(
                 Path(os.path.join(CNF_DIR, config["state_file"])).resolve()
             )
-
+        
+            # 创建必要的目录
             os.makedirs(config["ndjson_dir"], exist_ok=True)
             os.makedirs(config["output_dir"], exist_ok=True)
-
-            if config["use_proxy"] == True:
+        
+            # 处理代理设置
+            if config.get("use_proxy", False):
                 config["proxy"] = gen_proxy(config)
             else:
                 config["proxy"] = None
+                
             return config
 
     except FileNotFoundError:
         print(f"错误: 找不到配置文件 '{config_file}'")
         sys.exit(1)
     except json.JSONDecodeError:
-        print(f"错误: '{config_file}' 不是有效的 JSON 文件")
+        if is_yaml:
+            print(f"错误: '{config_file}' 不是有效的 YAML 文件")
+        else:
+            print(f"错误: '{config_file}' 不是有效的 JSON 文件")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"错误: '{config_file}' 不是有效的 YAML 文件: {str(e)}")
         sys.exit(1)
     except Exception as e:
         print(f"错误: 读取配置文件时发生错误: {str(e)}")

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+    #results {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+    }
+    .paper {
+      padding: 8px;
+      margin-bottom: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .paper-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .paper-meta {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    .paper-url {
+      font-size: 12px;
+      word-break: break-all;
+      margin-bottom: 5px;
+    }
+    button {
+      padding: 8px 12px;
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    button:hover {
+      background-color: #3367D6;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    .download-options {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+    }
+    .download-options label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .download-progress {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #333;
+    }
+    .status {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>知网下载链接提取器</h1>
+  
+  <button id="extractBtn">提取页面链接</button>
+  <button id="copyAllBtn" disabled>复制所有链接</button>
+  <button id="downloadAllBtn" disabled>一键下载全部</button>
+  
+  <div class="download-options">
+    <h2 style="font-size: 14px; margin-top: 0;">批量下载选项</h2>
+    <label>
+      下载间隔 (秒):
+      <input type="number" id="downloadInterval" min="1" max="60" value="10">
+    </label>
+    <button id="sequentialDownloadBtn" disabled>顺序</button>
+    <div id="downloadProgress" class="download-progress" style="display: none;">
+      正在下载: <span id="currentDownload">0</span> / <span id="totalDownload">0</span>
+      <button id="stopDownloadBtn">停止下载</button>
+    </div>
+  </div>
+
+  <div id="status" class="status"></div>
+  <div id="results"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

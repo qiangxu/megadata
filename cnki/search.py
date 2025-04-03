@@ -6,6 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import json
+import yaml
 import urllib.parse
 import urllib3
 import argparse
@@ -27,18 +28,19 @@ from Crypto.Util.Padding import pad
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 SEARCH_TARGET_URLS = {
-    2: "http://124.222.211.12:3344/kns8s/brief/grid",
-    3: "http://222.186.61.87:8085/kns8s/brief/grid",
-    8: "http://222.186.61.87:8082/kns8s/brief/grid"
+    "2": "http://124.222.211.12:3344/kns8s/brief/grid",
+    "3": "http://222.186.61.87:8085/kns8s/brief/grid",
+    "8": "http://222.186.61.87:8082/kns8s/brief/grid",
+    "zju": "http://kns-cnki-net-s.webvpn.zju.edu.cn:8001/kns8s/brief/grid?sf_request_type=ajax"
 }
 REFERERS = {
-    2: "http://124.222.211.12:3344/kns8/defaultresult/index",
-    3: "http://222.186.61.87:8085/kns8s/defaultresult/index",
-    8: "http://222.186.61.87:8082/kns8s/defaultresult/index"
+    "2": "http://124.222.211.12:3344/kns8/defaultresult/index",
+    "3": "http://222.186.61.87:8085/kns8s/defaultresult/index",
+    "8": "http://222.186.61.87:8082/kns8s/defaultresult/index",
+    "zju": "http://kns-cnki-net-s.webvpn.zju.edu.cn:8001/kns8s/defaultresult/index",
 }
 
-
-def read_config(config_file):
+def read_config(config_file, update_proxy=False):
     """
     读取并解析 JSON 配置文件
 
@@ -48,30 +50,57 @@ def read_config(config_file):
     Returns:
         dict: 解析后的配置数据
     """
+    # 检查是否为YAML文件
+    is_yaml = config_file.lower().endswith(('.yaml', '.yml'))
+    
     try:
         CNF_DIR = os.path.dirname(os.path.abspath(config_file))
         with open(config_file, "r", encoding="utf-8") as f:
-            config = json.load(f)
+            if is_yaml:
+                # 解析YAML文件
+                config = yaml.safe_load(f)
+            else:
+                # 解析JSON文件
+                config = json.load(f)
+            
+            # 处理路径（两种格式通用）
             config["ndjson_dir"] = str(
                 Path(os.path.join(CNF_DIR, config["ndjson_dir"])).resolve()
             )
             config["output_dir"] = str(
                 Path(os.path.join(CNF_DIR, config["output_dir"])).resolve()
             )
-
+            config["state_file"] = str(
+                Path(os.path.join(CNF_DIR, config["state_file"])).resolve()
+            )
+        
+            # 创建必要的目录
             os.makedirs(config["ndjson_dir"], exist_ok=True)
             os.makedirs(config["output_dir"], exist_ok=True)
+        
+            # 处理代理设置
+            if config.get("use_proxy", False):
+                config["proxy"] = gen_proxy(config)
+            else:
+                config["proxy"] = None
+                
             return config
+
     except FileNotFoundError:
         print(f"错误: 找不到配置文件 '{config_file}'")
         sys.exit(1)
     except json.JSONDecodeError:
-        print(f"错误: '{config_file}' 不是有效的 JSON 文件")
+        if is_yaml:
+            print(f"错误: '{config_file}' 不是有效的 YAML 文件")
+        else:
+            print(f"错误: '{config_file}' 不是有效的 JSON 文件")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"错误: '{config_file}' 不是有效的 YAML 文件: {str(e)}")
         sys.exit(1)
     except Exception as e:
         print(f"错误: 读取配置文件时发生错误: {str(e)}")
         sys.exit(1)
-
 
 def search_cnki_by_category(
     site_id, category_code, page=1, page_size=50, sci_only=True, cookies=None
@@ -309,7 +338,8 @@ def extract_publications(site_id, html_content, category_code):
                         orig_url, filename, dbname, title, authors, source, date
                     )
                 else:
-                    breakpoint()
+                    download_element = row.find("td", class_="operat").find("a", class_="downloadlink")
+                    download_link = download_element.get("href") if download_element else orig_url
 
                 publications.append(
                     {
@@ -768,7 +798,7 @@ def main():
     parser.add_argument("-c", "--config", required=True, help="指定JSON配置文件的路径")
     parser.add_argument("-S", "--sci", action="store_true", help="只搜索SCI收录的文献")
     parser.add_argument(
-        "-s", "--site-id", type=int, default=2, help="只搜索SCI收录的文献"
+        "-s", "--site-id", required=True, help="site_tag"
     )
     parser.add_argument(
         "-m", "--metadata", default="./metadata.json", help="指定metadata.json文件路径"

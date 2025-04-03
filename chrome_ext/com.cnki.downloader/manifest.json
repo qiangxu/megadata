@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "知网下载链接提取器",
+  "version": "1.0",
+  "description": "提取知网页面中的下载链接和论文名称，支持顺序下载",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "downloads",
+    "scripting",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [],
+  "web_accessible_resources": [
+    {
+      "resources": ["links.txt", "domains.txt"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
