@@ -380,7 +380,7 @@ def exec_dump_task(config_file, sleep_interval=10):
 
         file_dir = os.path.join(output_dir, category, month)
         file_path = gen_safe_filepath(file_dir, title, authors, date)
-
+        
         if os.path.exists(file_path):
             print("PDF 已存在!")
             df_state.loc[url_idx, "downloaded"] = -1

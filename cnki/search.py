@@ -40,6 +40,21 @@ REFERERS = {
     "zju": "http://kns-cnki-net-s.webvpn.zju.edu.cn:8001/kns8s/defaultresult/index",
 }
 
+def gen_proxy(config): 
+
+    # 获取API接口返回的代理IP
+    proxy_ips = sorted(requests.get(config["proxy_url"]).text.split("\r\n"))
+    proxy_ip = proxy_ips[(int(config["var_id"]) % len(proxy_ips))]
+
+    proxy = {
+        "http": "http://%(user)s:%(pwd)s@%(proxy)s/"
+        % {"user": config["username"], "pwd": config["password"], "proxy": proxy_ip},
+        "https": "http://%(user)s:%(pwd)s@%(proxy)s/"
+        % {"user": config["username"], "pwd": config["password"], "proxy": proxy_ip},
+    }
+
+    return proxy
+
 def read_config(config_file, update_proxy=False):
     """
     读取并解析 JSON 配置文件
@@ -325,15 +340,15 @@ def extract_publications(site_id, html_content, category_code):
             # 构建下载链接
             download_link = None
             if orig_url and "?" in orig_url:
-                if site_id == 3:
+                if site_id == "3":
                     download_link = convert_download_url_site_3(
                         orig_url, filename, dbname, title, authors, source, date
                     )
-                elif site_id == 2:
+                elif site_id == "2":
                     download_link = convert_download_url_site_2(
                         orig_url, filename, dbname, title, authors, source, date
                     )
-                elif site_id == 8:
+                elif site_id == "8":
                     download_link = convert_download_url_site_8(
                         orig_url, filename, dbname, title, authors, source, date
                     )
