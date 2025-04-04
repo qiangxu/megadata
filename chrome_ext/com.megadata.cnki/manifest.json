@@ -1,0 +1,42 @@
+{
+	"manifest_version": 3,
+	"name": " com.cnki.downloader.bak",
+	"version": "3.0",
+	"description": "通过配置文件自动读取NDJSON文件中的论文信息和下载链接，支持批量和顺序下载",
+	"content_scripts": [
+		{
+			"matches": ["*://*.cnki.net/*", "*://*.sjuku.top/*", "*://*.cnkionline.xyz/*", "<all_urls>"],
+			"js": ["content.js"]
+		}
+	],
+	"permissions": [
+		"activeTab",
+		"storage",
+		"downloads",
+		"scripting",
+		"webNavigation",
+		"nativeMessaging",
+		"tabs"
+	],
+	"host_permissions": [
+		"*://*.cnki.net/*",
+		"*://*.sjuku.top/*",
+		"*://*.cnkionline.xyz/*",
+		"*://122.51.45.239/*",
+		"*://*.webvpn.zju.edu.cn/*",
+		"http://www-cnki-net-s.webvpn.zju.edu.cn:8001/*",
+		"<all_urls>"
+	],
+	"action": {
+		"default_popup": "popup.html"
+	},
+	"background": {
+		"service_worker": "background.js"
+	},
+	"web_accessible_resources": [
+		{
+			"resources": ["config.yaml", "js-yaml.min.js"],
+			"matches": ["<all_urls>"]
+		}
+	]
+}

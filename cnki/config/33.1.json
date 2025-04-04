@@ -1,0 +1,13 @@
+{
+    "var_id": 1,
+    "ndjson_dir": "../site33/links33.1/",
+    "state_file": "../site33/state33.1.json",
+    "dump_cookies" : "PHPSESSID=e4tfk7dh003psl8i7u0dsl5gk4",
+    "use_proxy": false,
+    "proxy_url" : "https://kps.kdlapi.com/api/getkps/?secret_id=oa4b1yax5od7gf1cpzrf&signature=50y05l8pa1qe0mn09vfs9sh5ooztd70k&num=1&pt=1&sep=1",
+    "username" : "elfnmntc",
+    "password" : "kw2ivn8h",
+    "search_cookies" : "KNS2COOKIE=1743419733.406.31818.454335|b25e41a932fd162af3b8c5cff4059fc3;Ecp_ClientId=g250331134700163051;Ecp_IpLoginFail=250331106.12.175.117;.AspNetCore.Session=CfDJ8BXdxIabDIpMoW9whFOgBUtjVifyVujd84Sf4a3eIhBr1iWSn2m00ELfER6og8CoNQEDvIXfKsL%2BEmd916uSMTvJiODiuDdNguEgUU270ooM7mGP5LF3GpkuZRkwHV0%2BZ5C7Yz9gY%2B7Hk6rGZvwwECngx8auQhEzWNpQmXmI4ecY;dsorders=FFD;xue338_session=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJVc2VySW5mbyI6eyJVc2VybmFtZSI6IjQwMTQ0MjcwMCIsIkRvbWFpbiI6Indlbnh5LWExMjUtbGliIn0sImV4cCI6MTc0MzQzMDUyMn0.Iwl2PC0CMD6IGFeGbPS-InHhS7algrTHFl1THALiZ-g;dsortypes=DESC;dblang=both;knsadv-searchtype=%7B%22BLZOG7CK%22%3A%22gradeSearch%2CmajorSearch%22%2C%22MPMFIG1A%22%3A%22gradeSearch%2CmajorSearch%2CsentenceSearch%22%2C%22T2VC03OH%22%3A%22gradeSearch%2CmajorSearch%22%2C%22JQIRZIYA%22%3A%22gradeSearch%2CmajorSearch%2CsentenceSearch%22%2C%22S81HNSV3%22%3A%22gradeSearch%22%2C%22YSTT4HG0%22%3A%22gradeSearch%2CmajorSearch%2CauthorSearch%2CsentenceSearch%22%2C%22ML4DRIDX%22%3A%22gradeSearch%2CmajorSearch%22%2C%22WQ0UVIAA%22%3A%22gradeSearch%2CmajorSearch%22%2C%22VUDIXAIY%22%3A%22gradeSearch%2CmajorSearch%22%2C%22NN3FJMUV%22%3A%22gradeSearch%2CmajorSearch%2CauthorSearch%2CsentenceSearch%22%2C%22LSTPFY1C%22%3A%22gradeSearch%2CmajorSearch%2CsentenceSearch%22%2C%22HHCPM1F8%22%3A%22gradeSearch%2CmajorSearch%22%2C%22OORPU5FE%22%3A%22gradeSearch%2CmajorSearch%22%2C%22WD0FTY92%22%3A%22gradeSearch%2CmajorSearch%2CauthorSearch%2CsentenceSearch%22%2C%22BPBAFJ5S%22%3A%22gradeSearch%2CmajorSearch%2CauthorSearch%2CsentenceSearch%22%2C%22EMRPGLPA%22%3A%22gradeSearch%2CmajorSearch%22%2C%22PWFIRAGL%22%3A%22gradeSearch%2CmajorSearch%2CsentenceSearch%22%2C%22U8J8LYLV%22%3A%22gradeSearch%2CmajorSearch%22%2C%22R79MZMCB%22%3A%22gradeSearch%22%2C%22J708GVCE%22%3A%22gradeSearch%2CmajorSearch%22%2C%22HR1YT1Z9%22%3A%22gradeSearch%2CmajorSearch%22%2C%22JUP3MUPD%22%3A%22gradeSearch%2CmajorSearch%2CauthorSearch%2CsentenceSearch%22%2C%22NLBO1Z6R%22%3A%22gradeSearch%2CmajorSearch%22%2C%22RMJLXHZ3%22%3A%22gradeSearch%2CmajorSearch%2CsentenceSearch%22%2C%221UR4K4HZ%22%3A%22gradeSearch%2CmajorSearch%2CauthorSearch%2CsentenceSearch%22%2C%22NB3BWEHK%22%3A%22gradeSearch%2CmajorSearch%22%2C%22XVLO76FD%22%3A%22gradeSearch%2CmajorSearch%22%7D;SID_kns_new=kns2618108;SID_sug=018107",
+    "output_dir": "../data/sci",
+    "site_id": 33
+}

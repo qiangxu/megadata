@@ -1,0 +1,31 @@
+# 知网下载链接提取器配置文件
+
+# NDJSON文件目录路径
+# 可以使用相对路径或绝对路径
+# 相对路径是相对于扩展所在目录
+ndjson_dir: "../../cnki/site_zju/links_zju.1/"
+
+# 下载间隔时间（秒）
+# 建议不低于3秒，避免被服务器检测为爬虫
+download_interval: 10
+
+# 下载完成后是否自动删除文件
+delete_after_download: true
+
+# 是否自动下载
+# 设置为true时，扩展会自动扫描目录并下载
+auto_download: true
+
+# 自动重新扫描间隔（秒）
+# 仅当auto_download为true时有效
+# 设置为0或不设置则不自动重新扫描
+auto_rescan_interval: 300
+
+# 浏览器相关设置
+browser:
+  # 是否在下载时保持标签页隐藏
+  keep_tab_hidden: true
+  
+  # 是否在所有下载完成后关闭标签页
+  close_tab_when_done: true
+
