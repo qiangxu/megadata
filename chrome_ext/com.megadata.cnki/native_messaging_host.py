@@ -33,18 +33,18 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("cnki_downloader_host.log"),
+        logging.FileHandler("com.megadata.cnki.log"),
         logging.StreamHandler()
     ]
 )
 
-logger = logging.getLogger("cnki_downloader_host")
+logger = logging.getLogger("com.megadata.cnki")
 
 # 扩展ID，需要替换为实际的扩展ID
-CHROME_EXTENSION_ID = "caebnacoadaakbjbcccfljpkhioieifp"
+CHROME_EXTENSION_ID = "nlinncbcafgkdijjnggfogpolimmaakl"
 
 # 主机名，与manifest.json中的name保持一致
-HOST_NAME = "com.cnki.downloader.bak"
+HOST_NAME = "com.megadata.cnki"
 
 # Windows注册表路径
 WINDOWS_REGISTRY_KEY = r"SOFTWARE\Google\Chrome\NativeMessagingHosts"
@@ -69,7 +69,7 @@ def create_manifest_file() -> str:
         ]
     }
     
-    manifest_path = os.path.join(CURRENT_DIR, f"{HOST_NAME}_manifest.json")
+    manifest_path = os.path.join(CURRENT_DIR, f"{HOST_NAME}.manifest.json")
     
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)

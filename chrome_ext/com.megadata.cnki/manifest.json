@@ -1,6 +1,6 @@
 {
 	"manifest_version": 3,
-	"name": " com.cnki.downloader.bak",
+	"name": " com.megadata.cnki",
 	"version": "3.0",
 	"description": "通过配置文件自动读取NDJSON文件中的论文信息和下载链接，支持批量和顺序下载",
 	"content_scripts": [
