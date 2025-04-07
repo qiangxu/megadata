@@ -383,7 +383,7 @@ function executeProcessFile(filename) {
                     resetDownloadStats(papers.length);
 
                     // 为每篇论文添加下载任务
-                    papers.slice(0, 3).forEach(paper => {
+                    papers.forEach(paper => {
                         addTask(TaskType.DOWNLOAD_PAPER, { paper });
                     });
                 } else {

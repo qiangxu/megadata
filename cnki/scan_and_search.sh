@@ -107,7 +107,7 @@ echo "状态文件: $STATE_FILE"
 echo "站点ID: $SITE_ID"
 
 for j in {1..500}; do 
-	if [ -d "$NDJSON_DIR" ] && [ "$(ls -A "$NDJSON_DIR" 2>/dev/null)" ]; then
+	if [ -d "$NDJSON_DIR" ] && [ "$(ls -A "$NDJSON_DIR/*.json" 2>/dev/null)" ]; then
 		echo "NDJSON目录中存在文件，休息10秒后再次检查..."
 		sleep 10
 	else

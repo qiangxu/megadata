@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
         resultsDiv: document.getElementById('results')
     };
 
+    /*
     // 在popup.js中添加一个诊断按钮
     const diagnosticBtn = document.createElement('button');
     diagnosticBtn.textContent = '诊断下载问题';
@@ -66,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
-
+    */
     document.querySelector('.main-controls').appendChild(testDownloadBtn);
     // =====================================================
     // 2. 配置文件加载
