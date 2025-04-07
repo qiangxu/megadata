@@ -224,7 +224,6 @@ def search_accounts(token=TOKEN, cookie=COOKIE):
             time.sleep(random.randint(10, 20) / 10)
 
 def crawl_account(fakeid, token=TOKEN, cookie=COOKIE):
-    # breakpoint()
     fakeid = fakeid.strip().strip("==")
     print("FAKEID: ", fakeid)
     Path(f"./data/posts/{fakeid}").mkdir(parents=True, exist_ok=True)
@@ -284,7 +283,7 @@ def crawl_account(fakeid, token=TOKEN, cookie=COOKIE):
             """
             #wb = extract_text_from_html(content).replace("\t", "").replace(" ", "")
             f.write(content + "\n")
-        time.sleep(random.randint(600, 900) / 10)
+        time.sleep(random.randint(30, 50) / 10)
     print(f"FAKEID: {fakeid} IS COMPLETED W/ {count} UPDATES")
     
     return count 
