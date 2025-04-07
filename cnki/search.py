@@ -94,10 +94,11 @@ def read_config(config_file, update_proxy=False):
             os.makedirs(config["output_dir"], exist_ok=True)
         
             # 处理代理设置
-            if config.get("use_proxy", False):
-                config["proxy"] = gen_proxy(config)
-            else:
-                config["proxy"] = None
+            #if config.get("use_proxy", False):
+            #    config["proxy"] = gen_proxy(config)
+            #else:
+            #    config["proxy"] = None
+            config["proxy"] = None
                 
             return config
 

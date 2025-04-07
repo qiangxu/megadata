@@ -161,7 +161,6 @@ def extract_pdf_url_site3_or_8(url, cookies, proxy=None):
             raise Exception("OVERLOAD", json_response.text)
         raise Exception("UNKNOWN", json_response.text)
 
-
 def gen_safe_filepath(file_dir, title, authors, date):
 
     os.makedirs(file_dir, exist_ok=True)
@@ -206,6 +205,7 @@ def download_pdf(url, cookies, file_path, proxy=None):
             verify=False,
             stream=True,
             proxies=proxy,
+            timeout=(5, 60)
         )
 
         # 检查内容类型
@@ -218,14 +218,19 @@ def download_pdf(url, cookies, file_path, proxy=None):
             or "application/octet-stream" in content_type.lower()
             or content_disposition.upper().endswith(".PDF")
         ):
-            if not os.path.exists(file_path):
-                with open(file_path, "wb") as f:
-                    for chunk in pdf_response.iter_content(chunk_size=8192):
-                        f.write(chunk)
+            
+            total_size = int(pdf_response.headers.get('content-length', 0))
 
+            with open(file_path, "wb") as f:
+                downloaded = 0
+                for chunk in pdf_response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            print(f"\r下载进度: {downloaded}/{total_size} ({downloaded*100/total_size:.2f}%), {file_path[0:50]}", end='')
                 print("PDF 成功下载!")
-            else:
-                print("PDF 已存在!")
+
             return -1
         else:
             print(f"下载失败，响应不是PDF。内容类型: {content_type}")
@@ -245,9 +250,9 @@ def download_pdf(url, cookies, file_path, proxy=None):
         if "AUTH" in str(e):
             print("认证超时, 换COOKIES", e)
             return 5000
-        if "Remote end closed connection without response" in str(e):
-            print("连接超时", e)
-            return 3000
+        if "ProxyError" in str(e):
+            print("切换代理", e)
+            return 7000
         if "EOF" in str(e):
             print("网络断开", e)
             return 3000
@@ -263,10 +268,11 @@ def download_pdf(url, cookies, file_path, proxy=None):
 
 
 def gen_proxy(config):
-
     # 获取API接口返回的代理IP
     proxy_ips = sorted(requests.get(config["proxy_url"]).text.split("\r\n"))
     proxy_ip = proxy_ips[(int(config["var_id"]) % len(proxy_ips))]
+
+    print("PROXY_IP:", proxy_ip)
 
     proxy = {
         "http": "http://%(user)s:%(pwd)s@%(proxy)s/"
@@ -317,7 +323,7 @@ def read_config(config_file, update_proxy=False):
             os.makedirs(config["output_dir"], exist_ok=True)
         
             # 处理代理设置
-            if config.get("use_proxy", False):
+            if config.get("use_proxy", False) and update_proxy:
                 config["proxy"] = gen_proxy(config)
             else:
                 config["proxy"] = None
@@ -396,8 +402,11 @@ def exec_dump_task(config_file, sleep_interval=10):
                 df_state.loc[url_idx, "downloaded"] = (
                     df_state.loc[url_idx, "downloaded"] + downloaded
                 )
-            elif downloaded in [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]:
+            elif downloaded in [1000, 2000, 3000, 4000, 5000, 6000, 8000, 9000]:
                 df_state.loc[url_idx, "downloaded"] = downloaded
+            elif downloaded in [7000]:
+                config = read_config(config_file, update_proxy=True)
+                proxy = config["proxy"]
             else:
                 save_state(df_state, state_file)
                 assert False
