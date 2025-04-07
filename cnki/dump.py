@@ -228,8 +228,8 @@ def download_pdf(url, cookies, file_path, proxy=None):
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total_size > 0:
-                            print(f"\r下载进度: {downloaded}/{total_size} ({downloaded*100/total_size:.2f}%), {file_path[0:50]}", end='')
-                print("PDF 成功下载!")
+                            print(f"\r下载进度: {downloaded}/{total_size} ({downloaded*100/total_size:.2f}%), {file_path.name[0:100]}", end='')
+                print("\nPDF 成功下载!")
 
             return -1
         else:

@@ -2,7 +2,7 @@
     "var_id": 2,
     "ndjson_dir": "../site3/links3.2/",
     "state_file": "../site3/state3.2.json",
-    "dump_cookies" : "clicaptcha_text=%E5%A2%83;PHPSESSID=ka4li13k9k9bo2jitto7avvqt4",
+    "dump_cookies" : "clicaptcha_text=%E7%8A%AF;PHPSESSID=obkk4tf6utckt3bb5ouu0789j0",
     "use_proxy": true,
     "proxy_url" : "https://kps.kdlapi.com/api/getkps/?secret_id=o3s8g26jn622s42x7c0k&signature=wsit7r6fzxzofpwci9ss11e2ff99kbvo&num=1&pt=1&sep=1",
     "username" : "elfnmntc",
