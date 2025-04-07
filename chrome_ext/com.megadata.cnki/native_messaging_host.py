@@ -228,6 +228,12 @@ def handle_read_file(request: Dict) -> Dict:
         logger.error(f"读取文件失败: {e}")
         return {'success': False, 'error': str(e)}
 
+def backup_file(path):
+    file_path = Path(path)
+    new_path = file_path.with_suffix(file_path.suffix + ".bak")  # 保留原后缀并追加.bak
+    file_path.rename(new_path)
+    print(f"已备份：{file_path.name} -> {new_path.name}")
+
 def handle_delete_file(request: Dict) -> Dict:
     """
     处理删除文件请求
@@ -248,7 +254,8 @@ def handle_delete_file(request: Dict) -> Dict:
             return {'success': False, 'error': f"文件不存在: {path}"}
             
         # 删除文件
-        os.remove(path)
+        #os.remove(path)
+        backup_file(path)
             
         return {
             'success': True,
