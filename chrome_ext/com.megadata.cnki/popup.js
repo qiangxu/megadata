@@ -67,8 +67,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
-    */
     document.querySelector('.main-controls').appendChild(testDownloadBtn);
+    */
     // =====================================================
     // 2. 配置文件加载
     // =====================================================
@@ -425,8 +425,12 @@ document.addEventListener('DOMContentLoaded', function() {
             updateStatus('初始化失败: ' + error.message);
         }
     }
+    // 开始初始化
+    initialize();
 
-    // 在 popup.js 中添加
+    console.log('popup.js 初始化完成');
+    /*
+    // 添加测试按钮
     function testContentScript() {
         chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
             if (!tabs || tabs.length === 0) {
@@ -451,15 +455,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    // 开始初始化
-    initialize();
-
-    console.log('popup.js 初始化完成');
-    // 添加测试按钮
     const testCsBtn = document.createElement('button');
     testCsBtn.textContent = '测试 Content Script';
     testCsBtn.addEventListener('click', testContentScript);
     document.querySelector('.main-controls').appendChild(testCsBtn);
+    */
 });
 
 
