@@ -30,12 +30,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SEARCH_TARGET_URLS = {
     "2": "http://124.222.211.12:3344/kns8s/brief/grid",
     "3": "http://222.186.61.87:8085/kns8s/brief/grid",
+    "5": "http://175.178.121.173/kns8s/brief/grid",
     "8": "http://222.186.61.87:8082/kns8s/brief/grid",
     "zju": "http://kns-cnki-net-s.webvpn.zju.edu.cn:8001/kns8s/brief/grid?sf_request_type=ajax"
 }
 REFERERS = {
     "2": "http://124.222.211.12:3344/kns8/defaultresult/index",
     "3": "http://222.186.61.87:8085/kns8s/defaultresult/index",
+    "5": "http://175.178.121.173/kns8s/defaultresult/index",
     "8": "http://222.186.61.87:8082/kns8s/defaultresult/index",
     "zju": "http://kns-cnki-net-s.webvpn.zju.edu.cn:8001/kns8s/defaultresult/index",
 }

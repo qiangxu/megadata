@@ -7,12 +7,13 @@
 #!/bin/bash
 
 # 检查是否提供了配置文件参数
-if [ $# -lt 1 ]; then
-    echo "用法: $0 <配置文件路径>"
+if [ $# -lt 2 ]; then
+    echo "用法: $0 <配置文件路径> <时间间隔>"
     exit 1
 fi
 
 CONFIG_FILE="$1"
+INTERVAL="$2"
 
 # 检查配置文件是否存在
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -127,7 +128,7 @@ for j in {1..500}; do
 
     for i in {1..2}; do
         python search.py -c $CONFIG_FILE -S -s $SITE_ID -t 1 -z 20
-        python dump.py -c $CONFIG_FILE -i 20
-        python dump.py -c $CONFIG_FILE -i 20
+        python dump.py -c $CONFIG_FILE -i $INTERVAL
+        python dump.py -c $CONFIG_FILE -i $INTERVAL
     done
 done
