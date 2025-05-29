@@ -1,13 +1,10 @@
-#!/usr/bin/env python
-# CREATED DATE: 2025年05月25日 星期日 20时40分53秒
-# CREATED BY: qiangxu, toxuqiang@gmail.com
-
 
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Dropbox Batch Download Script
-分批下载Dropbox文件的Python脚本，支持手动转移控制
+Python script for batch downloading Dropbox files, supporting manual transfer control,
+directory-by-directory processing, and configuration via a YAML file.
 """
 
 import os
@@ -21,91 +18,149 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import dropbox
 from dropbox.exceptions import ApiError, AuthError
+import yaml # Added for YAML configuration
 
+# Default configuration path, can be overridden
+DEFAULT_CONFIG_PATH = "config.yaml"
+
+def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Optional[Dict]:
+    """Loads configuration from a YAML file."""
+    logger = logging.getLogger(__name__) # Gets a logger (assuming basicConfig is called in main)
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            if config is None: # Handles empty or invalid YAML file that parses to None
+                logger.warning(f"Config file '{config_path}' is empty or not valid YAML. Returning empty config.")
+                return {}
+            logger.info(f"Configuration successfully loaded from '{config_path}'.")
+            return config
+    except FileNotFoundError:
+        logger.error(f"Config file '{config_path}' not found.")
+        return None
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing config file '{config_path}': {e}")
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while loading config '{config_path}': {e}")
+        return None
 
 class DropboxBatchDownloader:
-    def __init__(self, access_token: str, local_download_dir: str, 
+    def __init__(self, access_token: str, local_download_dir: str,
                  state_file: str = "download_state.json",
-                 batch_size_gb: float = 50.0):
-        """
-        初始化下载器
+                 batch_size_gb: float = 50.0,
+                 config_path: str = DEFAULT_CONFIG_PATH): # Added config_path
         
-        Args:
-            access_token: Dropbox访问令牌
-            local_download_dir: 本地下载目录
-            state_file: 状态记录文件路径
-            batch_size_gb: 批次大小限制(GB)
-        """
+        # Setup logger first so other init steps can use it
+        self._setup_logging() 
+
+        self.current_access_token = access_token # Store the initial token
         self.dbx = dropbox.Dropbox(access_token)
+        self.config_path = config_path # Store config path for reloading
         self.local_download_dir = Path(local_download_dir)
         self.state_file = Path(state_file)
-        self.batch_size_bytes = int(batch_size_gb * 1024 * 1024 * 1024)  # 转换为字节
+        self.batch_size_bytes = int(batch_size_gb * 1024 * 1024 * 1024)
         
-        # 创建必要目录
         self.local_download_dir.mkdir(parents=True, exist_ok=True)
         
-        # 加载状态
         self.download_state = self._load_state()
         
-        # 配置日志
-        self._setup_logging()
-        
-        # 统计信息
         self.stats = {
-            'total_files': 0,
-            'downloaded': 0,
-            'transferred': 0,
-            'pending_transfer': 0,
-            'failed': 0,
-            'current_batch_size': 0
+            'total_files_in_current_scope': 0,
+            'downloaded_in_run': 0,
+            'transferred_in_run': 0,
+            'failed_in_run': 0,
         }
     
     def _setup_logging(self):
-        """配置日志记录"""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler('dropbox_download.log', encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
+        """Configures logging for this class instance."""
+        # Basic config should be done in main. Here we just get the logger.
+        self.logger = logging.getLogger(self.__class__.__name__)
     
+    def _reload_config_and_update_settings(self):
+        """Reloads configuration from the YAML file and updates relevant settings."""
+        self.logger.info(f"Attempting to reload configuration from '{self.config_path}'...")
+        config = load_config(self.config_path) # Use the global load_config function
+
+        if config is None:
+            self.logger.error("Failed to reload configuration. Continuing with existing settings.")
+            return
+
+        # Update Access Token if changed
+        new_access_token = config.get('DROPBOX_ACCESS_TOKEN')
+        if new_access_token and new_access_token != self.current_access_token:
+            self.logger.info("Dropbox access token has changed in the config file. Re-initializing Dropbox client.")
+            try:
+                self.dbx = dropbox.Dropbox(new_access_token) # Re-initialize client
+                self.current_access_token = new_access_token # Update stored token
+                self.logger.info("Dropbox client re-initialized with new access token.")
+            except Exception as e:
+                self.logger.error(f"Failed to re-initialize Dropbox client with new token: {e}. Continuing with the old client.")
+        elif not new_access_token:
+            self.logger.warning("'DROPBOX_ACCESS_TOKEN' not found or empty in reloaded config. Token not updated.")
+
+        # Update Batch Size if changed (example of another updatable parameter)
+        new_batch_size_gb_str = config.get('BATCH_SIZE_GB')
+        if new_batch_size_gb_str is not None:
+            try:
+                new_batch_size_gb = float(new_batch_size_gb_str)
+                new_batch_size_bytes = int(new_batch_size_gb * 1024 * 1024 * 1024)
+                if new_batch_size_bytes != self.batch_size_bytes:
+                    old_size_formatted = self._format_size(self.batch_size_bytes)
+                    new_size_formatted = self._format_size(new_batch_size_bytes)
+                    self.logger.info(f"Batch size changed from {old_size_formatted} to {new_size_formatted}.")
+                    self.batch_size_bytes = new_batch_size_bytes
+            except ValueError:
+                self.logger.error(f"Invalid 'BATCH_SIZE_GB' value ('{new_batch_size_gb_str}') in reloaded config. Batch size not updated.")
+        
+        self.logger.info("Configuration reload attempt finished.")
+
     def _load_state(self) -> Dict:
-        """加载下载状态"""
+        """Loads download state."""
         if self.state_file.exists():
             try:
                 with open(self.state_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    state = json.load(f)
+                    if 'files' not in state: state['files'] = {}
+                    if 'processed_top_level_items_for_sync' not in state:
+                        state['processed_top_level_items_for_sync'] = []
+                    if 'last_update' not in state:
+                        state['last_update'] = datetime.now().isoformat()
+                    return state
             except Exception as e:
-                self.logger.warning(f"无法加载状态文件: {e}")
+                self.logger.warning(f"Could not load state file: {e}")
         return {
             'files': {},
-            'batches': {},
-            'current_batch': 1,
+            'processed_top_level_items_for_sync': [],
             'last_update': datetime.now().isoformat()
         }
     
     def _save_state(self):
-        """保存下载状态"""
+        """Saves download state."""
         try:
             self.download_state['last_update'] = datetime.now().isoformat()
             with open(self.state_file, 'w', encoding='utf-8') as f:
                 json.dump(self.download_state, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            self.logger.error(f"保存状态文件失败: {e}")
+            self.logger.error(f"Failed to save state file: {e}")
     
-    def _get_file_hash(self, file_path: Path) -> str:
-        """计算文件MD5哈希值"""
+    def _get_file_hash(self, file_path: Path) -> Optional[str]:
+        """Calculates MD5 hash of a file."""
+        if not file_path.is_file():
+            self.logger.warning(f"Cannot calculate hash, file not found or not a file: {file_path}")
+            return None
         hash_md5 = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest()
-    
+        try:
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hash_md5.update(chunk)
+            return hash_md5.hexdigest()
+        except Exception as e:
+            self.logger.error(f"Error calculating hash for {file_path}: {e}")
+            return None
+
     def _format_size(self, size_bytes: int) -> str:
-        """格式化文件大小显示"""
+        """Formats file size for display."""
+        if size_bytes is None: size_bytes = 0
         for unit in ['B', 'KB', 'MB', 'GB']:
             if size_bytes < 1024:
                 return f"{size_bytes:.1f}{unit}"
@@ -113,24 +168,28 @@ class DropboxBatchDownloader:
         return f"{size_bytes:.1f}TB"
     
     def _get_local_downloaded_size(self) -> int:
-        """计算本地已下载但未转移的文件总大小"""
+        """Calculates total size of locally downloaded but not yet transferred files."""
         total_size = 0
         if not self.local_download_dir.exists():
             return 0
         
-        for file_path, file_info in self.download_state['files'].items():
+        for file_path_str, file_info in self.download_state.get('files', {}).items():
             if file_info.get('status') == 'downloaded':
-                local_file = self.local_download_dir / file_path.lstrip('/')
-                if local_file.exists():
-                    total_size += local_file.stat().st_size
-        
+                local_path_str = file_info.get('local_path')
+                local_file = Path(local_path_str) if local_path_str else (self.local_download_dir / file_path_str.lstrip('/'))
+                
+                if local_file.exists() and local_file.is_file():
+                    try:
+                        total_size += local_file.stat().st_size
+                    except FileNotFoundError:
+                         self.logger.warning(f"State indicates file exists, but not found locally: {local_file}")
         return total_size
     
     def _update_file_state(self, dropbox_path: str, status: str, **kwargs):
-        """更新文件下载状态"""
+        """Updates download state for a file."""
         if 'files' not in self.download_state:
             self.download_state['files'] = {}
-        
+            
         if dropbox_path not in self.download_state['files']:
             self.download_state['files'][dropbox_path] = {}
         
@@ -141,371 +200,513 @@ class DropboxBatchDownloader:
         })
         self._save_state()
     
-    def get_dropbox_files(self, folder_path: str = "") -> List[Dict]:
-        """获取Dropbox文件列表"""
+    def get_dropbox_files(self, folder_path: str = "", recursive: bool = True) -> List[Dict]:
+        """Gets Dropbox file list."""
         files = []
         try:
-            self.logger.info(f"扫描Dropbox文件夹: {folder_path or '根目录'}")
-            
-            result = self.dbx.files_list_folder(folder_path, recursive=True)
-            
+            self.logger.info(f"Scanning Dropbox folder: '{folder_path or 'Root directory'}' (Recursive: {recursive})")
+            result = self.dbx.files_list_folder(folder_path, recursive=recursive)
             while True:
                 for entry in result.entries:
                     if isinstance(entry, dropbox.files.FileMetadata):
                         files.append({
                             'path': entry.path_lower,
+                            'name': entry.name,
                             'size': entry.size,
                             'modified': entry.server_modified.isoformat(),
                             'content_hash': entry.content_hash
                         })
-                
                 if not result.has_more:
                     break
                 result = self.dbx.files_list_folder_continue(result.cursor)
-                
         except ApiError as e:
-            self.logger.error(f"获取Dropbox文件列表失败: {e}")
+            self.logger.error(f"Failed to get Dropbox file list for '{folder_path}': {e}")
             return []
-        
-        self.logger.info(f"发现 {len(files)} 个文件")
-        self.stats['total_files'] = len(files)
+        self.logger.info(f"Found {len(files)} files in '{folder_path or 'Root'}' (Recursive: {recursive}).")
+        self.stats['total_files_in_current_scope'] = len(files)
         return files
     
     def download_file(self, dropbox_path: str, local_path: Path, file_size: int) -> bool:
-        """下载单个文件"""
+        """Downloads a single file."""
         try:
-            self.logger.info(f"下载文件: {dropbox_path} ({self._format_size(file_size)})")
-            
-            # 创建本地目录
             local_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 下载文件
             with open(local_path, 'wb') as f:
-                metadata, response = self.dbx.files_download(dropbox_path)
+                metadata, response = self.dbx.files_download(path=dropbox_path)
                 f.write(response.content)
-            
-            # 验证文件大小
             if local_path.stat().st_size != file_size:
-                self.logger.error(f"文件大小不匹配: {dropbox_path}")
+                self.logger.error(f"File size mismatch for {dropbox_path}: Expected {file_size}, Got {local_path.stat().st_size}")
                 local_path.unlink(missing_ok=True)
                 return False
-            
             return True
-            
         except ApiError as e:
-            self.logger.error(f"下载文件失败 {dropbox_path}: {e}")
+            self.logger.error(f"Download failed for {dropbox_path}: {e}")
+            if local_path.exists(): local_path.unlink(missing_ok=True)
             return False
         except Exception as e:
-            self.logger.error(f"下载文件出现异常 {dropbox_path}: {e}")
+            self.logger.error(f"An unexpected error occurred during download of {dropbox_path}: {e}")
+            if local_path.exists(): local_path.unlink(missing_ok=True)
             return False
     
-    def check_batch_limit(self) -> Tuple[bool, int]:
-        """检查是否达到批次大小限制"""
+    def check_batch_limit(self, check_if_any_downloaded: bool = False) -> Tuple[bool, int]:
+        """Checks if batch size limit is reached."""
         current_size = self._get_local_downloaded_size()
+        if check_if_any_downloaded:
+            return current_size > 0, current_size
         return current_size >= self.batch_size_bytes, current_size
     
-    def prompt_transfer(self, current_size: int) -> bool:
-        """提示用户进行转移操作"""
+    def prompt_transfer(self, current_size: int, current_scope_description: Optional[str] = None, is_final_transfer: bool = False) -> bool:
+        """Prompts user for transfer operation. Config is reloaded after this returns."""
         print("\n" + "="*60)
-        print("📦 批次下载完成！")
-        print(f"当前已下载: {self._format_size(current_size)}")
-        print(f"批次限制: {self._format_size(self.batch_size_bytes)}")
-        print("="*60)
-        print("\n请将已下载的文件转移到目标位置：")
-        print(f"  源目录: {self.local_download_dir.absolute()}")
-        print("\n转移选项：")
-        print("  1. 复制到NAS/移动硬盘")
-        print("  2. 使用其他方式备份")
-        print("  3. 手动整理文件")
-        print("\n⚠️  转移完成后，本地文件将被清理以继续下载")
+        print("📦 Batch Download Paused for File Transfer!")
+        if is_final_transfer:
+            print("All scopes processed. This is a final check for any remaining files.")
+        elif current_scope_description:
+            print(f"Batch limit likely reached during processing of: {current_scope_description}")
         
+        print(f"Currently downloaded (pending transfer): {self._format_size(current_size)}")
+        print(f"Batch limit: {self._format_size(self.batch_size_bytes)}") # Uses current self.batch_size_bytes
+        print("="*60)
+        print("\nPlease transfer the downloaded files to your target location:")
+        print(f"  Source directory: {self.local_download_dir.resolve()}")
+        print("\nTransfer options:")
+        print("  1. Copy to NAS/external hard drive")
+        print("  2. Use other backup methods")
+        print("  3. Manually organize files")
+        print("\n⚠️  After completing the transfer, local files will be cleared to continue downloading.")
+        
+        user_response_positive = False
         while True:
-            response = input("\n转移完成了吗？(y/n/s) [y=是 n=否 s=查看状态]: ").lower().strip()
-            
+            response = input("\nIs the transfer complete? (y/n/s) [y=yes, n=no, s=show status]: ").lower().strip()
             if response == 'y':
-                return True
+                user_response_positive = True
+                break
             elif response == 'n':
-                print("请完成文件转移后再继续...")
-                continue
+                print("Please complete the file transfer before continuing...")
+                user_response_positive = False
+                break 
             elif response == 's':
-                self._show_transfer_status()
+                self._show_global_transfer_status()
                 continue
             else:
-                print("请输入 y/n/s")
-    
-    def _show_transfer_status(self):
-        """显示转移状态信息"""
-        print("\n📊 当前状态：")
+                print("Please enter y, n, or s.")
         
-        downloaded_files = []
-        for file_path, file_info in self.download_state['files'].items():
+        # Reload config AFTER user responds y/n, as requested.
+        self._reload_config_and_update_settings()
+        return user_response_positive
+
+    def _show_global_transfer_status(self):
+        """Displays current transfer status information."""
+        print("\n📊 Current Global Transfer Status:")
+        downloaded_files_list = []
+        total_size_val = 0
+        for file_path, file_info in self.download_state.get('files',{}).items():
             if file_info.get('status') == 'downloaded':
-                local_file = self.local_download_dir / file_path.lstrip('/')
-                if local_file.exists():
-                    downloaded_files.append({
-                        'path': file_path,
-                        'size': local_file.stat().st_size,
-                        'local_path': local_file
-                    })
-        
-        if downloaded_files:
-            print(f"等待转移的文件: {len(downloaded_files)} 个")
-            total_size = sum(f['size'] for f in downloaded_files)
-            print(f"总大小: {self._format_size(total_size)}")
-            
-            print("\n最近下载的文件:")
-            for i, file_info in enumerate(downloaded_files[-10:], 1):
-                print(f"  {i:2d}. {file_info['path']} ({self._format_size(file_info['size'])})")
+                local_path_str = file_info.get('local_path')
+                local_file = Path(local_path_str) if local_path_str else (self.local_download_dir / file_path.lstrip('/'))
+                if local_file.exists() and local_file.is_file():
+                    try:
+                        fsize = local_file.stat().st_size
+                        downloaded_files_list.append({
+                            'path': file_path,
+                            'size': fsize,
+                            'local_path': str(local_file.resolve())
+                        })
+                        total_size_val += fsize
+                    except FileNotFoundError:
+                        pass
+        if downloaded_files_list:
+            print(f"Files pending transfer: {len(downloaded_files_list)}")
+            print(f"Total size: {self._format_size(total_size_val)}")
+            downloaded_files_list.sort(key=lambda x: x['path']) 
+            print("\nRecently downloaded files (up to 10, sorted by path):")
+            for i, file_item in enumerate(downloaded_files_list[-10:], 1):
+                print(f"  {i:2d}. {file_item['path']} ({self._format_size(file_item['size'])})")
         else:
-            print("没有等待转移的文件")
-    
+            print("No files are currently pending transfer.")
+        print(f"Local download directory: {self.local_download_dir.resolve()}")
+
     def clear_transferred_files(self):
-        """清理已转移的文件"""
+        """Clears files that were marked as 'downloaded'."""
+        self.logger.info("Starting cleanup of transferred files...")
         cleared_count = 0
         cleared_size = 0
-        
-        for file_path, file_info in list(self.download_state['files'].items()):
+        for file_path, file_info in list(self.download_state.get('files', {}).items()):
             if file_info.get('status') == 'downloaded':
-                local_file = self.local_download_dir / file_path.lstrip('/')
-                if local_file.exists():
-                    file_size = local_file.stat().st_size
+                local_path_str = file_info.get('local_path')
+                local_file = Path(local_path_str) if local_path_str else (self.local_download_dir / file_path.lstrip('/'))
+                if local_file.exists() and local_file.is_file():
                     try:
+                        file_size_val = local_file.stat().st_size
                         local_file.unlink()
                         cleared_count += 1
-                        cleared_size += file_size
-                        
-                        # 更新状态为已转移
+                        cleared_size += file_size_val
                         self._update_file_state(file_path, 'transferred', 
                                               transferred_time=datetime.now().isoformat())
-                        
                     except Exception as e:
-                        self.logger.error(f"删除文件失败 {local_file}: {e}")
-        
-        # 清理空目录
+                        self.logger.error(f"Failed to delete file {local_file}: {e}")
+                else:
+                    self.logger.warning(f"File {local_file} marked 'downloaded' but not found locally. Updating status to 'missing_local'.")
+                    self._update_file_state(file_path, 'missing_local', missing_time=datetime.now().isoformat())
         self._cleanup_empty_dirs(self.local_download_dir)
-        
-        self.logger.info(f"清理完成：{cleared_count} 个文件，释放 {self._format_size(cleared_size)} 空间")
+        self.logger.info(f"Cleanup complete: {cleared_count} files, freed {self._format_size(cleared_size)} space.")
+        self.stats['transferred_in_run'] += cleared_count
         return cleared_count, cleared_size
     
     def _cleanup_empty_dirs(self, directory: Path):
-        """递归清理空目录"""
+        """Recursively cleans up empty directories."""
+        if not directory.is_dir():
+            return
+        for item in directory.iterdir():
+            if item.is_dir():
+                self._cleanup_empty_dirs(item)
         try:
-            for item in directory.iterdir():
-                if item.is_dir():
-                    self._cleanup_empty_dirs(item)
-                    try:
-                        item.rmdir()  # 只能删除空目录
-                    except OSError:
-                        pass  # 目录不为空，忽略
-        except Exception:
-            pass
-    
-    def sync_batch(self, folder_path: str = "", delay_between_files: float = 1.0) -> bool:
-        """执行批次同步"""
-        # 检查当前是否需要转移
-        needs_transfer, current_size = self.check_batch_limit()
-        if needs_transfer:
-            self.logger.info(f"当前本地文件大小: {self._format_size(current_size)}")
-            if self.prompt_transfer(current_size):
-                self.clear_transferred_files()
-            else:
-                self.logger.info("等待用户完成文件转移...")
-                return False
-        
-        # 获取文件列表
-        files = self.get_dropbox_files(folder_path)
-        if not files:
-            self.logger.warning("没有找到要下载的文件")
-            return True
-        
-        # 过滤出需要下载的文件
+            if not any(directory.iterdir()):
+                directory.rmdir()
+                self.logger.info(f"Removed empty directory: {directory}")
+        except OSError as e:
+            self.logger.debug(f"Could not remove directory: {directory} - {e}")
+        except Exception as e:
+            self.logger.error(f"Error during empty directory cleanup for {directory}: {e}")
+
+    def _get_top_level_entries(self, folder_path: str) -> Tuple[List[Dict], List[str]]:
+        """Gets files directly under folder_path and paths of top-level subfolders."""
+        direct_files_metadata = []
+        top_level_folder_paths = []
+        try:
+            self.logger.info(f"Listing entries in Dropbox folder: '{folder_path or 'Root'}'")
+            result = self.dbx.files_list_folder(folder_path, recursive=False)
+            while True:
+                for entry in result.entries:
+                    if isinstance(entry, dropbox.files.FileMetadata):
+                        direct_files_metadata.append({
+                            'path': entry.path_lower,
+                            'name': entry.name,
+                            'size': entry.size,
+                            'modified': entry.server_modified.isoformat(),
+                            'content_hash': entry.content_hash
+                        })
+                    elif isinstance(entry, dropbox.files.FolderMetadata):
+                        top_level_folder_paths.append(entry.path_lower)
+                if not result.has_more:
+                    break
+                result = self.dbx.files_list_folder_continue(result.cursor)
+        except ApiError as e:
+            self.logger.error(f"Failed to list entries in '{folder_path or 'Root'}': {e}")
+        top_level_folder_paths.sort()
+        direct_files_metadata.sort(key=lambda x: x['path'])
+        self.logger.info(f"Found {len(direct_files_metadata)} direct files and {len(top_level_folder_paths)} top-level folders in '{folder_path or 'Root'}'.")
+        return direct_files_metadata, top_level_folder_paths
+
+    def _process_file_downloads_for_list(self, files_to_consider: List[Dict], scope_description: str, delay_between_files: float) -> bool:
+        """Processes a given list of file metadata for download, applying batching logic."""
+        self.logger.info(f"Starting to process {len(files_to_consider)} files for scope: {scope_description}")
+        self.stats['total_files_in_current_scope'] = len(files_to_consider)
         pending_files = []
-        for file_info in files:
+        for file_info in files_to_consider:
             file_path = file_info['path']
             file_state = self.download_state['files'].get(file_path, {})
-            
             if file_state.get('status') not in ['downloaded', 'transferred']:
                 pending_files.append(file_info)
-        
         if not pending_files:
-            self.logger.info("所有文件都已下载完成")
+            self.logger.info(f"No pending files to download for scope: {scope_description}")
             return True
-        
-        self.logger.info(f"待下载文件: {len(pending_files)} 个")
-        
-        # 按大小排序，小文件优先
-        pending_files.sort(key=lambda x: x['size'])
-        
-        # 开始下载
+        self.logger.info(f"Found {len(pending_files)} pending files for download in scope: {scope_description}")
+        pending_files.sort(key=lambda x: x['path']) # Sort by file path
         for i, file_info in enumerate(pending_files, 1):
             dropbox_path = file_info['path']
             local_path = self.local_download_dir / dropbox_path.lstrip('/')
-            
-            self.logger.info(f"处理文件 {i}/{len(pending_files)}: {dropbox_path}")
-            
-            # 检查批次限制
+            self.logger.info(f"Handling file {i}/{len(pending_files)} in scope '{scope_description}': {file_info['name']} ({self._format_size(file_info['size'])}) Path: {dropbox_path}")
             needs_transfer, current_size = self.check_batch_limit()
             if needs_transfer:
-                self.logger.info("达到批次大小限制，暂停下载")
-                if self.prompt_transfer(current_size):
+                self.logger.info(f"Global batch limit reached ({self._format_size(current_size)}) during processing of scope '{scope_description}'.")
+                # Prompt_transfer now reloads config internally AFTER user response
+                if self.prompt_transfer(current_size, current_scope_description=scope_description):
                     self.clear_transferred_files()
                 else:
-                    return False
-            
-            # 下载文件
+                    self.logger.info("User chose not to transfer. Download process for this scope will stop.")
+                    return False 
             self._update_file_state(dropbox_path, 'downloading', 
                                   size=file_info['size'],
                                   modified=file_info['modified'])
-            
             if self.download_file(dropbox_path, local_path, file_info['size']):
+                file_hash_val = self._get_file_hash(local_path)
                 self._update_file_state(dropbox_path, 'downloaded',
-                                      local_path=str(local_path),
-                                      file_hash=self._get_file_hash(local_path))
-                self.stats['downloaded'] += 1
-                self.logger.info(f"✅ 下载完成: {dropbox_path}")
+                                      local_path=str(local_path.resolve()),
+                                      file_hash=file_hash_val)
+                self.stats['downloaded_in_run'] += 1
+                self.logger.info(f"✅ Download complete: {dropbox_path}")
             else:
                 self._update_file_state(dropbox_path, 'download_failed')
-                self.stats['failed'] += 1
-                self.logger.error(f"❌ 下载失败: {dropbox_path}")
-            
-            # 控制下载频率
+                self.stats['failed_in_run'] += 1
+                self.logger.error(f"❌ Download failed: {dropbox_path}")
             if delay_between_files > 0:
                 time.sleep(delay_between_files)
-            
-            # 每下载10个文件显示一次统计
-            if i % 10 == 0:
+            if i % 10 == 0 or i == len(pending_files):
                 self._print_stats()
-        
-        # 检查是否还有待转移文件
+        self.logger.info(f"Finished processing file downloads for scope: {scope_description}")
+        return True
+
+    def sync_by_directory_structure(self, root_dropbox_path: str = "", delay_between_files: float = 1.0) -> bool:
+        """Synchronizes files by first processing direct files, then each top-level folder."""
+        self.logger.info(f"Starting sync by directory structure for Dropbox path: '{root_dropbox_path or 'Root'}'")
+        STATE_KEY_PROCESSED_ITEMS = 'processed_top_level_items_for_sync'
+        processed_items_list = self.download_state[STATE_KEY_PROCESSED_ITEMS]
+        direct_files_metadata, top_level_folders = self._get_top_level_entries(root_dropbox_path)
+        scopes_to_process = []
+        root_files_scope_id = f"{root_dropbox_path or '#ROOT#'}#DIRECT_FILES#"
+        if direct_files_metadata:
+            scopes_to_process.append({
+                'id': root_files_scope_id,
+                'description': f"Direct files in '{root_dropbox_path or 'Root'}'",
+                'files_list': direct_files_metadata,
+                'is_folder_scope': False
+            })
+        for tlf_path in top_level_folders:
+            scopes_to_process.append({
+                'id': tlf_path,
+                'description': f"Folder '{tlf_path}' and its contents",
+                'dropbox_path_for_files': tlf_path,
+                'is_folder_scope': True
+            })
+        if not scopes_to_process:
+            self.logger.info(f"No direct files or top-level folders found to process under '{root_dropbox_path or 'Root'}'.")
+            return True
+        for scope in scopes_to_process:
+            scope_id = scope['id']
+            scope_desc = scope['description']
+            if scope_id in processed_items_list:
+                self.logger.info(f"Scope '{scope_desc}' (ID: {scope_id}) already processed. Skipping.")
+                continue
+            self.logger.info(f"--- Starting processing for scope: {scope_desc} ---")
+            files_for_this_scope = []
+            if scope['is_folder_scope']:
+                files_for_this_scope = self.get_dropbox_files(folder_path=scope['dropbox_path_for_files'], recursive=True)
+            else:
+                files_for_this_scope = scope['files_list']
+            if not files_for_this_scope:
+                self.logger.info(f"No files found to process for scope '{scope_desc}'. Marking as processed.")
+                processed_items_list.append(scope_id)
+                self._save_state()
+                continue
+            completed_normally = self._process_file_downloads_for_list(
+                files_to_consider=files_for_this_scope,
+                scope_description=scope_desc,
+                delay_between_files=delay_between_files
+            )
+            if not completed_normally:
+                self.logger.info(f"Processing for scope '{scope_desc}' was interrupted by user. Overall sync will stop.")
+                return False
+            self.logger.info(f"--- Finished processing for scope: {scope_desc} ---")
+            processed_items_list.append(scope_id)
+            self._save_state()
+            self.logger.info(f"Scope '{scope_desc}' (ID: {scope_id}) marked as fully processed for this iteration.")
+        needs_final_transfer, final_size = self.check_batch_limit(check_if_any_downloaded=True)
+        if needs_final_transfer and final_size > 0:
+            self.logger.info("All scopes processed. Final check for any remaining downloaded files pending transfer.")
+            # Prompt_transfer now reloads config internally AFTER user response
+            if self.prompt_transfer(final_size, is_final_transfer=True, current_scope_description="Overall completion"):
+                self.clear_transferred_files()
+        self.logger.info("Sync by directory structure finished successfully.")
+        return True
+
+    def sync_batch(self, folder_path: str = "", delay_between_files: float = 1.0) -> bool:
+        """Original sync_batch functionality: processes a given Dropbox folder recursively."""
+        self.logger.info(f"Starting sync_batch for Dropbox folder: '{folder_path or 'Root'}' (recursive by default)")
         needs_transfer, current_size = self.check_batch_limit()
         if needs_transfer:
-            self.logger.info("所有文件下载完成，还有文件待转移")
-            if self.prompt_transfer(current_size):
+            self.logger.info(f"Initial local file size for sync_batch: {self._format_size(current_size)}")
+            # Prompt_transfer now reloads config internally AFTER user response
+            if self.prompt_transfer(current_size, current_scope_description=f"folder '{folder_path or 'Root'}' (initial check)"):
                 self.clear_transferred_files()
-        
+            else:
+                self.logger.info("User chose not to transfer yet during initial check. Stopping sync_batch.")
+                return False
+        all_files_in_scope = self.get_dropbox_files(folder_path=folder_path, recursive=True)
+        if not all_files_in_scope:
+            self.logger.warning(f"No files found in '{folder_path or 'Root'}' to download for sync_batch.")
+            return True 
+        scope_desc_for_batch = f"folder '{folder_path or 'Root'}' (recursive sync_batch)"
+        process_result = self._process_file_downloads_for_list(
+            files_to_consider=all_files_in_scope,
+            scope_description=scope_desc_for_batch,
+            delay_between_files=delay_between_files
+        )
+        if not process_result:
+            return False
+        needs_transfer, current_size = self.check_batch_limit(check_if_any_downloaded=True)
+        if needs_transfer and current_size > 0:
+            self.logger.info(f"sync_batch for '{folder_path or 'Root'}' completed. Final check for downloaded files.")
+            # Prompt_transfer now reloads config internally AFTER user response
+            if self.prompt_transfer(current_size, is_final_transfer=True, current_scope_description=f"folder '{folder_path or 'Root'}' (final check)"):
+                self.clear_transferred_files()
+        self.logger.info(f"sync_batch for '{folder_path or 'Root'}' finished.")
         return True
     
     def _print_stats(self):
-        """打印统计信息"""
-        current_size = self._get_local_downloaded_size()
-        
+        """Prints download statistics."""
+        current_local_size = self._get_local_downloaded_size() 
         self.logger.info("=" * 50)
-        self.logger.info("下载统计:")
-        self.logger.info(f"  总文件数: {self.stats['total_files']}")
-        self.logger.info(f"  已下载: {self.stats['downloaded']}")
-        self.logger.info(f"  失败数: {self.stats['failed']}")
-        self.logger.info(f"  本地大小: {self._format_size(current_size)}")
-        self.logger.info(f"  批次限制: {self._format_size(self.batch_size_bytes)}")
+        self.logger.info("Download Statistics (Current Run):")
+        self.logger.info(f"  Files in current scope (approx): {self.stats.get('total_files_in_current_scope', 'N/A')}")
+        self.logger.info(f"  Downloaded in this run: {self.stats['downloaded_in_run']}")
+        self.logger.info(f"  Failed in this run: {self.stats['failed_in_run']}")
+        self.logger.info(f"  Files cleared (transferred) in this run: {self.stats['transferred_in_run']}")
+        self.logger.info("-" * 50)
+        self.logger.info("Overall Local State:")
+        self.logger.info(f"  Current local files (pending transfer): {self._format_size(current_local_size)}")
+        self.logger.info(f"  Batch size limit: {self._format_size(self.batch_size_bytes)}")
         self.logger.info("=" * 50)
     
     def retry_failed(self):
-        """重试失败的文件"""
-        failed_files = []
-        for path, state in self.download_state['files'].items():
+        """Retries failed downloads."""
+        failed_files_paths = []
+        for path, state in self.download_state.get('files',{}).items():
             if state.get('status') == 'download_failed':
-                failed_files.append(path)
-        
-        if not failed_files:
-            self.logger.info("没有失败的文件需要重试")
+                failed_files_paths.append(path)
+        if not failed_files_paths:
+            self.logger.info("No failed files to retry.")
             return
-        
-        self.logger.info(f"重试 {len(failed_files)} 个失败的文件")
-        
-        for dropbox_path in failed_files:
+        self.logger.info(f"Retrying {len(failed_files_paths)} failed files.")
+        files_to_retry_metadata = []
+        for dropbox_path in failed_files_paths:
             try:
                 metadata = self.dbx.files_get_metadata(dropbox_path)
                 if isinstance(metadata, dropbox.files.FileMetadata):
-                    local_path = self.local_download_dir / dropbox_path.lstrip('/')
-                    
-                    if self.download_file(dropbox_path, local_path, metadata.size):
-                        self._update_file_state(dropbox_path, 'downloaded',
-                                              local_path=str(local_path),
-                                              file_hash=self._get_file_hash(local_path))
-                        self.logger.info(f"✅ 重试成功: {dropbox_path}")
-                    else:
-                        self.logger.error(f"❌ 重试失败: {dropbox_path}")
-                        
+                    files_to_retry_metadata.append({
+                        'path': metadata.path_lower, 'name': metadata.name, 'size': metadata.size,
+                        'modified': metadata.server_modified.isoformat(), 'content_hash': metadata.content_hash
+                    })
+                else:
+                    self.logger.warning(f"Path {dropbox_path} is not a file, cannot retry.")
             except ApiError as e:
-                self.logger.error(f"重试文件失败 {dropbox_path}: {e}")
-    
+                self.logger.error(f"Failed to get metadata for retrying {dropbox_path}: {e}")
+        if files_to_retry_metadata:
+            self.logger.info(f"Attempting to download {len(files_to_retry_metadata)} previously failed files.")
+            self._process_file_downloads_for_list(
+                files_to_consider=files_to_retry_metadata,
+                scope_description="retrying failed files",
+                delay_between_files=1.0
+            )
+        else:
+            self.logger.info("No valid previously failed files found to retry after fetching metadata.")
+
     def show_status(self):
-        """显示详细状态"""
+        """Displays detailed status report."""
         print("\n" + "="*60)
-        print("📋 下载状态报告")
+        print("📊 Download Status Report")
         print("="*60)
-        
-        # 统计各状态文件数量
         status_count = {}
-        total_size = 0
-        
-        for file_info in self.download_state['files'].values():
+        total_file_count_in_state = 0
+        total_size_in_state = 0
+        for file_info in self.download_state.get('files', {}).values():
+            total_file_count_in_state +=1
             status = file_info.get('status', 'unknown')
             status_count[status] = status_count.get(status, 0) + 1
-            total_size += file_info.get('size', 0)
-        
-        print(f"总文件数: {len(self.download_state['files'])}")
-        print(f"总大小: {self._format_size(total_size)}")
-        print("\n状态分布:")
+            total_size_in_state += file_info.get('size', 0)
+        print(f"Total files tracked in state: {total_file_count_in_state}")
+        print(f"Total size (from state info): {self._format_size(total_size_in_state)}")
+        print("\nStatus Distribution:")
         for status, count in status_count.items():
-            status_name = {
-                'downloaded': '已下载',
-                'transferred': '已转移', 
-                'downloading': '下载中',
-                'download_failed': '下载失败',
-                'unknown': '未知'
-            }.get(status, status)
-            print(f"  {status_name}: {count} 个")
-        
-        # 本地文件状态
-        current_local_size = self._get_local_downloaded_size()
-        print(f"\n本地待转移: {self._format_size(current_local_size)}")
-        print(f"批次限制: {self._format_size(self.batch_size_bytes)}")
-        
-        if current_local_size >= self.batch_size_bytes:
-            print("⚠️  已达到批次限制，建议转移文件")
-
+            status_name = {'downloaded': 'Downloaded (Pending Transfer)', 'transferred': 'Transferred (Cleared Locally)', 
+                           'downloading': 'Downloading (In Progress)', 'download_failed': 'Download Failed',
+                           'missing_local': 'Missing Locally (Expected Downloaded)', 'unknown': 'Unknown'}.get(status, status.capitalize())
+            print(f"  {status_name}: {count} files")
+        current_local_size_val = self._get_local_downloaded_size()
+        print(f"\nLocal Files Pending Transfer (Actual Size): {self._format_size(current_local_size_val)}")
+        print(f"Batch Size Limit: {self._format_size(self.batch_size_bytes)}")
+        if current_local_size_val >= self.batch_size_bytes:
+            print("⚠️  Batch limit reached or exceeded. Transferring files is recommended.")
+        print("="*60)
 
 def main():
-    """主函数"""
-    # 配置参数
-    DROPBOX_ACCESS_TOKEN = "sl.u.AFt9_Dn2MdbRhPjtzvGMMQNcofU5JWA3pAFwjU0Mr7CRHSzK0lpxkig097N9V_diQySqVVCaXxwQh9CcUvL8nyzqnPcSQbhZUAeUh0gUp_pgsutrNSE1wFeEqgs3mKugqx1qofL2wWzBofoBB4_2q8P-xSk6tkZ2rMAm-wUgTo_Td-jdGLRJ3AnkENDOsUx_cz_iq--oHdJ1AZdkGANdKyEPcpTsR2CCIESAZjmrhj0grX2QsYereMAg2w3noV24WyPZvxNa29xGZrJpOtcaoXtsZ_umkKL_hdXRUgwsSX8t9IhVU10g02MjR0SEhoGmMPElDOyDaRmMYORMrCtKUhTF6w4xYE4sXgWB_oIoprZWIhI87a3jC6cGxTcU0MrqCTJ0qOw-oHDK0CINB1ZG9o1xVyICFC88Zio1BnSmsJ3jxHT-QxPtc4u5lugpPb-war0hwjGN_nK3bxNu_8x_vB3TO8Cv6aRSL-N3pVCw6ZPUo1z3xnjFFtMfLzlUR4QY2pxZA8AFqDXpG8ZTooFDbqXUTg1ZRnqEpP0riddY3sfVEpkktjnVTq8EcfJc8KRmgth_jhS8hrDxSjYBk11bmNkTHw1j3SAWmrw-5eA9Gmy2aP7T6wGtWR9gs3AKEvWr11ezUS-Gu29nu00t5P-9Nz-gF939xn7-nH7eiVHFLIpGuaaJrqB7_c8kRH21Cmz7qvjUnkK-KluhvZWzM7F4nmEVdabR7Qsh9EATiYKGJR2yRcM15icimE0D9fxO9g98Rz5iVx8-m8VMx6MBbTJQiX8WYQHIhXA4aO9u0bwPht3orY2HjGR0h6-HoYIxqc8byVsSTCwya3DB0PHPLFwFT896HLv4S6eN8OU2qEyp5nTJFSsMogAG6QzrS6Dgx5K9ud1ipA8fIDnm_w6L1a2zspCICd4pLg0jSBgyEnOpMWzk6_1NxX9NtY175iKINh4TpG9XGzYa-gQOqOxsDk5X70VH4gzkHa1vq0ujxliWTtNxZHh3PAf5F6B7ysoHbYoKbSsp8kYYyo8YKDXaPh9BKYbFOPvHBfb_lvXhqmaNDWtdtLVeT4wFLuzGhWGfgoh0mAhABpMx4T9PqSmU2Go1ZM06Po5bQbfaEpECZrtBZ61-YzcP5JeGCnrVSrycs6RjORNBYp-ZhDuwpzdbaN3L58AH02pKt1-OqdF0CWpEdHU83YQjQ9414JuLUToHLeCfCDZzOvZFady_oBMLvZZSZ8AewLQjEAyiM-4nBXbH4J18tSKVLW1TBrfTesry0UBg8DDcalWxcwPzUlNrLcymx3dSI-YQiHOSs6K-WX3thA4YB3GmQcTa-BkfAZ5T6YK1w4gN9AthGvm9xEc1761DKcFwKKB_K3ZuQ4efZleSQcq_cMEVPoV_u_ZVPSR74ozqbzNuUfhRHTzbo7ZeAPcFDRXg"
-    LOCAL_DOWNLOAD_DIR = "./downloads"  # 本地下载目录
-    DROPBOX_FOLDER = ""  # Dropbox文件夹路径，空字符串表示根目录
-    BATCH_SIZE_GB = 50.0  # 批次大小限制(GB)
-    
-    # 创建下载器
+    """Main function."""
+    # Setup basic logging as early as possible for the entire application
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - [%(name)s] - %(message)s',
+        handlers=[
+            logging.FileHandler('dropbox_downloader.log', encoding='utf-8'), # Consolidated log file
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__) # Logger for main function
+
+    CONFIG_FILE_PATH = "config.yaml"
+    config = load_config(CONFIG_FILE_PATH)
+
+    if config is None:
+        logger.critical(f"Critical error: Could not load configuration from '{CONFIG_FILE_PATH}'. Please ensure it exists and is valid.")
+        # Fallback to asking for token if config fails badly, or just exit
+        DROPBOX_ACCESS_TOKEN = input("Could not load config. Please enter your Dropbox Access Token: ").strip()
+        if not DROPBOX_ACCESS_TOKEN:
+            logger.critical("No access token provided. Exiting.")
+            return
+        # Use defaults for other params if config fails
+        LOCAL_DOWNLOAD_DIR = "./downloads_fallback"
+        DROPBOX_FOLDER = ""
+        BATCH_SIZE_GB = 50.0
+        DELAY_BETWEEN_FILES = 0.5
+        logger.warning("Using fallback default settings as config loading failed.")
+    else:
+        DROPBOX_ACCESS_TOKEN = config.get('DROPBOX_ACCESS_TOKEN')
+        if not DROPBOX_ACCESS_TOKEN:
+            logger.critical(f"Critical error: 'DROPBOX_ACCESS_TOKEN' not found or empty in '{CONFIG_FILE_PATH}'.")
+            # Optionally, ask for token here as well
+            DROPBOX_ACCESS_TOKEN = input(f"'DROPBOX_ACCESS_TOKEN' not in {CONFIG_FILE_PATH}. Please enter token: ").strip()
+            if not DROPBOX_ACCESS_TOKEN:
+                logger.critical("No access token provided. Exiting.")
+                return
+        
+        LOCAL_DOWNLOAD_DIR = config.get('LOCAL_DOWNLOAD_DIR', "./downloads")
+        DROPBOX_FOLDER = config.get('DROPBOX_FOLDER', "")
+        try:
+            BATCH_SIZE_GB = float(config.get('BATCH_SIZE_GB', 50.0))
+            DELAY_BETWEEN_FILES = float(config.get('DELAY_BETWEEN_FILES', 0.5))
+        except ValueError:
+            logger.error("Invalid numeric value for BATCH_SIZE_GB or DELAY_BETWEEN_FILES in config. Using defaults.")
+            BATCH_SIZE_GB = 50.0
+            DELAY_BETWEEN_FILES = 0.5
+
     downloader = DropboxBatchDownloader(
         access_token=DROPBOX_ACCESS_TOKEN,
         local_download_dir=LOCAL_DOWNLOAD_DIR,
-        batch_size_gb=BATCH_SIZE_GB
+        batch_size_gb=BATCH_SIZE_GB,
+        config_path=CONFIG_FILE_PATH # Pass config path for reloading
     )
     
     try:
-        print("🚀 Dropbox 批量下载器")
-        print(f"📁 下载目录: {LOCAL_DOWNLOAD_DIR}")
-        print(f"📦 批次大小: {BATCH_SIZE_GB}GB")
-        print("-" * 40)
+        logger.info("🚀 Dropbox Batch Downloader - Starting")
+        logger.info(f"💾 Download Directory: {Path(LOCAL_DOWNLOAD_DIR).resolve()}")
+        logger.info(f"📦 Batch Size: {BATCH_SIZE_GB}GB (Initial, may change if config reloaded)")
+        logger.info(f"📁 Dropbox Path: '{DROPBOX_FOLDER}' (Empty means root)")
+        logger.info("-" * 40)
         
-        # 显示当前状态
         downloader.show_status()
         
-        # 开始批次同步
-        downloader.sync_batch(
-            folder_path=DROPBOX_FOLDER,
-            delay_between_files=1.0
+        downloader.sync_by_directory_structure(
+            root_dropbox_path=DROPBOX_FOLDER,
+            delay_between_files=DELAY_BETWEEN_FILES # Initial delay, not dynamically reloaded by this script version
         )
         
-        print("\n🎉 下载任务完成！")
+        # logger.info("\nRetrying failed downloads if any...")
+        # downloader.retry_failed()
+
+        logger.info("\n🎉 Download task finished (or paused by user)!")
         downloader._print_stats()
+        downloader.show_status()
         
     except KeyboardInterrupt:
-        downloader.logger.info("用户中断下载")
-        print("\n⏸️  下载已暂停，可随时继续")
+        downloader.logger.info("User interrupted the download process.")
+        print("\n🛑 Download interrupted by user. Run again to resume.")
+    except AuthError as e:
+        downloader.logger.critical(f"Dropbox authentication error: {e}", exc_info=True)
+        print(f"\n❌ Authentication Error: Check your access token. Details: {e}")
+    except ApiError as e:
+        downloader.logger.critical(f"Dropbox API error: {e}", exc_info=True)
+        print(f"\n❌ API Error: Dropbox API returned an error. Details: {e}")
     except Exception as e:
-        downloader.logger.error(f"下载过程出现异常: {e}")
-        print(f"\n❌ 出现错误: {e}")
-
+        downloader.logger.critical(f"An unexpected error occurred: {e}", exc_info=True)
+        print(f"\n❌ An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     main()
-
