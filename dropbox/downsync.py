@@ -337,7 +337,7 @@ class DropboxBatchDownloader:
                 if local_file.exists() and local_file.is_file():
                     try:
                         file_size_val = local_file.stat().st_size
-                        local_file.unlink()
+                        #local_file.unlink()
                         cleared_count += 1
                         cleared_size += file_size_val
                         self._update_file_state(file_path, 'transferred', 
@@ -347,7 +347,7 @@ class DropboxBatchDownloader:
                 else:
                     self.logger.warning(f"File {local_file} marked 'downloaded' but not found locally. Updating status to 'missing_local'.")
                     self._update_file_state(file_path, 'missing_local', missing_time=datetime.now().isoformat())
-        self._cleanup_empty_dirs(self.local_download_dir)
+        #self._cleanup_empty_dirs(self.local_download_dir)
         self.logger.info(f"Cleanup complete: {cleared_count} files, freed {self._format_size(cleared_size)} space.")
         self.stats['transferred_in_run'] += cleared_count
         return cleared_count, cleared_size
@@ -398,7 +398,11 @@ class DropboxBatchDownloader:
         return direct_files_metadata, top_level_folder_paths
 
     def _process_file_downloads_for_list(self, files_to_consider: List[Dict], scope_description: str, delay_between_files: float) -> bool:
-        """Processes a given list of file metadata for download, applying batching logic."""
+        """
+        Processes a given list of file metadata for download, applying batching logic
+        and checking for pre-existing local files.
+        Returns True if processing completed normally, False if user interrupted by not transferring.
+        """
         self.logger.info(f"Starting to process {len(files_to_consider)} files for scope: {scope_description}")
         self.stats['total_files_in_current_scope'] = len(files_to_consider)
         pending_files = []
@@ -407,42 +411,75 @@ class DropboxBatchDownloader:
             file_state = self.download_state['files'].get(file_path, {})
             if file_state.get('status') not in ['downloaded', 'transferred']:
                 pending_files.append(file_info)
+        
         if not pending_files:
             self.logger.info(f"No pending files to download for scope: {scope_description}")
             return True
+
         self.logger.info(f"Found {len(pending_files)} pending files for download in scope: {scope_description}")
         pending_files.sort(key=lambda x: x['path']) # Sort by file path
+
         for i, file_info in enumerate(pending_files, 1):
             dropbox_path = file_info['path']
             local_path = self.local_download_dir / dropbox_path.lstrip('/')
-            self.logger.info(f"Handling file {i}/{len(pending_files)} in scope '{scope_description}': {file_info['name']} ({self._format_size(file_info['size'])}) Path: {dropbox_path}")
+            expected_size = file_info['size']
+            
+            self.logger.info(f"Handling file {i}/{len(pending_files)} in scope '{scope_description}': {file_info['name']} ({self._format_size(expected_size)}) Path: {dropbox_path}")
+
+            # --- START: Check for existing local file ---
+            if local_path.exists() and local_path.is_file():
+                local_file_size = local_path.stat().st_size
+                if local_file_size == expected_size:
+                    self.logger.info(f"File '{dropbox_path}' already exists locally with correct size ({self._format_size(expected_size)}). Skipping download.")
+                    file_hash_val = self._get_file_hash(local_path)
+                    self._update_file_state(dropbox_path, 'downloaded',
+                                          local_path=str(local_path.resolve()),
+                                          file_hash=file_hash_val,
+                                          size=expected_size, # Store size from Dropbox metadata
+                                          modified=file_info['modified']) # Store modified date from Dropbox metadata
+                    self.stats['downloaded_in_run'] += 1 # Count as successfully processed
+                    if delay_between_files > 0: # Apply delay even if skipped, to be consistent
+                        time.sleep(delay_between_files)
+                    if i % 10 == 0 or i == len(pending_files):
+                        self._print_stats()
+                    continue # Move to the next file
+                else:
+                    self.logger.warning(f"File '{dropbox_path}' exists locally but with incorrect size. Local: {self._format_size(local_file_size)}, Dropbox: {self._format_size(expected_size)}. Proceeding to re-download.")
+            # --- END: Check for existing local file ---
+
             needs_transfer, current_size = self.check_batch_limit()
             if needs_transfer:
                 self.logger.info(f"Global batch limit reached ({self._format_size(current_size)}) during processing of scope '{scope_description}'.")
-                # Prompt_transfer now reloads config internally AFTER user response
-                if self.prompt_transfer(current_size, current_scope_description=scope_description):
+                if self.prompt_transfer(current_size, current_scope_description=scope_description): # prompt_transfer now reloads config
                     self.clear_transferred_files()
                 else:
                     self.logger.info("User chose not to transfer. Download process for this scope will stop.")
                     return False 
+
             self._update_file_state(dropbox_path, 'downloading', 
-                                  size=file_info['size'],
-                                  modified=file_info['modified'])
-            if self.download_file(dropbox_path, local_path, file_info['size']):
+                                  size=expected_size, # Pass size for 'downloading' state
+                                  modified=file_info['modified']) # Pass modified for 'downloading' state
+            
+            if self.download_file(dropbox_path, local_path, expected_size):
                 file_hash_val = self._get_file_hash(local_path)
                 self._update_file_state(dropbox_path, 'downloaded',
                                       local_path=str(local_path.resolve()),
-                                      file_hash=file_hash_val)
+                                      file_hash=file_hash_val,
+                                      size=expected_size, # Also store size on successful download state
+                                      modified=file_info['modified']) # And modified date
                 self.stats['downloaded_in_run'] += 1
                 self.logger.info(f"✅ Download complete: {dropbox_path}")
             else:
-                self._update_file_state(dropbox_path, 'download_failed')
+                self._update_file_state(dropbox_path, 'download_failed') # Size/modified already stored from 'downloading'
                 self.stats['failed_in_run'] += 1
                 self.logger.error(f"❌ Download failed: {dropbox_path}")
+            
             if delay_between_files > 0:
                 time.sleep(delay_between_files)
+            
             if i % 10 == 0 or i == len(pending_files):
                 self._print_stats()
+        
         self.logger.info(f"Finished processing file downloads for scope: {scope_description}")
         return True
 
