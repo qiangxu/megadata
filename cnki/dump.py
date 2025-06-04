@@ -402,11 +402,13 @@ def exec_dump_task(config_file, sleep_interval=10):
                 df_state.loc[url_idx, "downloaded"] = (
                     df_state.loc[url_idx, "downloaded"] + downloaded
                 )
-            elif downloaded in [1000, 2000, 3000, 4000, 5000, 6000, 8000, 9000]:
+            elif downloaded in [1000, 2000, 3000, 4000, 6000, 8000, 9000]:
                 df_state.loc[url_idx, "downloaded"] = downloaded
             elif downloaded in [7000]:
                 config = read_config(config_file, update_proxy=True)
                 proxy = config["proxy"]
+            elif downloaded in [5000]: 
+                break
             else:
                 save_state(df_state, state_file)
                 assert False
