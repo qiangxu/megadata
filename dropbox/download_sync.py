@@ -381,17 +381,18 @@ class DropboxBatchDownloader:
         if not files_in_scope:
             self.logger.warning(f"No files found in Dropbox folder '{norm_dbx_folder_path}'. Nothing to archive.")
             return True 
+        
+        for i in range(2): 
+            self.logger.info(f"Attempting #{i} to download {len(files_in_scope)} files for '{norm_dbx_folder_path}'...")
+            download_process_ok = self._process_file_downloads_for_list(
+                files_to_consider=files_in_scope,
+                scope_description=f"Targeted folder '{norm_dbx_folder_path}'",
+                delay_between_files=delay_between_files
+            )
 
-        self.logger.info(f"Attempting to download {len(files_in_scope)} files for '{norm_dbx_folder_path}'...")
-        download_process_ok = self._process_file_downloads_for_list(
-            files_to_consider=files_in_scope,
-            scope_description=f"Targeted folder '{norm_dbx_folder_path}'",
-            delay_between_files=delay_between_files
-        )
-
-        if not download_process_ok:
-            self.logger.error(f"Download process for '{norm_dbx_folder_path}' was interrupted. Archival aborted.")
-            return False
+            if not download_process_ok:
+                self.logger.error(f"Download process for '{norm_dbx_folder_path}' was interrupted. Archival aborted.")
+                return False
 
         self.logger.info(f"Verifying local files for '{norm_dbx_folder_path}' before archiving...")
         all_files_verified = True
@@ -414,7 +415,7 @@ class DropboxBatchDownloader:
                 
                 local_file_to_check = Path(local_path_from_state_str)
                 try: # Ensure file is within the target directory being archived
-                    local_file_to_check.relative_to(local_target_dir_path)
+                    local_file_to_check.relative_to(local_target_dir_path.resolve())
                 except ValueError:
                     self.logger.error(f"File {local_file_to_check} (for {dbx_path}) is not within target dir '{local_target_dir_path}'. Archival aborted.")
                     all_files_verified = False; break
@@ -458,7 +459,7 @@ class DropboxBatchDownloader:
 
         self.logger.info(f"Updating state for archived files from '{norm_dbx_folder_path}'...")
         for file_to_update in files_in_scope: # Update state for all files that were part of this scope
-            self._update_file_state(file_to_update['dropbox_path'], 'archived',
+            self._update_file_state(file_to_update['path'], 'archived',
                                    archived_path=str(archive_path.resolve()),
                                    archived_time=datetime.now().isoformat())
         self._save_state()
