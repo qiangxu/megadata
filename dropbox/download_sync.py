@@ -262,6 +262,41 @@ class DropboxBatchDownloader:
         self.stats['transferred_in_run'] += cleared_count
 
 
+    def _get_safe_local_path(self, dropbox_path_str: str) -> Path:
+        """
+        Constructs a local path from a Dropbox path, shortening the filename if it's too long
+        to prevent 'File name too long' errors on the local filesystem.
+        """
+        # A safe character limit for the filename component. Most filesystems support up to 255 bytes,
+        # but individual components can have shorter limits (e.g., eCryptfs). 120 chars is very safe.
+        MAX_FILENAME_CHARS = 120 
+        
+        path_obj = Path(dropbox_path_str.lstrip('/'))
+        parent_dir = path_obj.parent
+        original_filename = path_obj.name
+        
+        if len(original_filename) > MAX_FILENAME_CHARS:
+            filename_stem = path_obj.stem
+            filename_ext = path_obj.suffix
+            
+            # Create a short, unique hash from the full path to avoid collisions with other shortened files.
+            path_hash = hashlib.sha1(dropbox_path_str.encode('utf-8')).hexdigest()[:8] # 8-char hash
+            
+            # Truncate the stem, leaving space for the hash, an underscore, and the extension.
+            # Example: very_long_name..._a1b2c3d4.pdf
+            available_len_for_stem = MAX_FILENAME_CHARS - len(filename_ext) - len(path_hash) - 1 # -1 for '_'
+            shortened_stem = filename_stem[:available_len_for_stem]
+            
+            new_filename = f"{shortened_stem}_{path_hash}{filename_ext}"
+            
+            self.logger.warning(f"Filename too long, shortening for local storage. "
+                              f"Original: '{original_filename}', New: '{new_filename}', Dropbox Path: {dropbox_path_str}")
+            
+            return self.local_download_dir / parent_dir / new_filename
+        else:
+            # Filename is not too long, return the standard local path.
+            return self.local_download_dir / path_obj
+
     def _cleanup_empty_dirs(self, directory: Path):
         if not directory.is_dir(): return
         for item in directory.iterdir():
@@ -303,7 +338,8 @@ class DropboxBatchDownloader:
         self.logger.info(f"Found {len(pending_files)} pending files in scope: {scope_description}")
         pending_files.sort(key=lambda x: x['path'])
         for i, file_info in enumerate(pending_files, 1):
-            dropbox_path = file_info['path']; local_path = self.local_download_dir / dropbox_path.lstrip('/')
+            dropbox_path = file_info['path']
+            local_path = self._get_safe_local_path(dropbox_path) # MODIFIED LINE
             expected_size = file_info['size']
             self.logger.info(f"Handling file {i}/{len(pending_files)} in '{scope_description}': {file_info['name']} ({self._format_size(expected_size)}) Path: {dropbox_path}")
             if local_path.exists() and local_path.is_file():
