@@ -518,21 +518,28 @@ class DropboxBatchDownloader:
                          f"  Current local files (pending transfer): {self._format_size(current_local_size)}\n"
                          f"  Batch size limit: {self._format_size(self.batch_size_bytes)}\n{'='*50}")
 
+
 def main():
+    """Main function to parse arguments and orchestrate the download process."""
+    # Setup basic logging for the entire application
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [%(name)s] - %(message)s',
                         handlers=[logging.FileHandler('dropbox_downloader.log', encoding='utf-8'), logging.StreamHandler()])
     logger = logging.getLogger(__name__)
 
+    # --- START OF MODIFICATION ---
+    # Setup command-line argument parser
     parser = argparse.ArgumentParser(description="Dropbox Batch Downloader with optional targeted folder archival.")
     parser.add_argument("-d", "--directory", type=str, default=None,
-                        help="Specific Dropbox directory to download, then compress and clean up (e.g., 'batch_1b/5000' or '/batch_1b/5000').")
+                        help="One or more specific Dropbox directories to download, compress, and clean up. "
+                             "Separate multiple directories with a comma, e.g., 'batch_1b/8000,batch_1b/8500'.")
     args = parser.parse_args()
+    # --- END OF MODIFICATION ---
 
     CONFIG_FILE_PATH = "config.yaml"
     config = load_config(CONFIG_FILE_PATH)
     
     # Configuration loading with fallbacks
-    if config is None: # Major config load failure
+    if config is None:
         logger.critical(f"Critical: Could not load config from '{CONFIG_FILE_PATH}'. Attempting to get token via input.")
         DROPBOX_ACCESS_TOKEN = input("Enter Dropbox Access Token: ").strip()
         if not DROPBOX_ACCESS_TOKEN: logger.critical("No token provided. Exiting."); return
@@ -559,26 +566,42 @@ def main():
     )
     
     try:
-        logger.info(f"🚀 Dropbox Downloader Starting. Target Dropbox Folder for normal sync: '{DROPBOX_FOLDER or 'Root'}'")
-        logger.info(f"💾 Local Download Dir: {Path(LOCAL_DOWNLOAD_DIR).resolve()}")
-        logger.info(f"📦 Batch Size: {BATCH_SIZE_GB}GB (Initial)")
+        logger.info("🚀 Dropbox Downloader Starting...")
         downloader.show_status()
 
+        # --- START OF MODIFICATION ---
         if args.directory:
-            target_dbx_path = args.directory
-            logger.info(f"🎯 TARGETED MODE: Processing specific Dropbox folder for archival: '{target_dbx_path}'")
-            downloader.process_specific_folder_and_archive(
-                dropbox_folder_path=target_dbx_path,
-                delay_between_files=DELAY_BETWEEN_FILES
-            )
+            # Split the argument string by commas to get a list of directories to process
+            target_directories = [d.strip() for d in args.directory.split(',') if d.strip()]
+            
+            if not target_directories:
+                logger.error("The -d/--directory argument was provided but contained no valid directory paths.")
+            else:
+                logger.info(f"🎯 TARGETED MODE: Will process {len(target_directories)} specified folder(s) sequentially: {target_directories}")
+            
+                for i, target_path in enumerate(target_directories, 1):
+                    logger.info(f"--- Starting task {i}/{len(target_directories)} for target folder: '{target_path}' ---")
+                    
+                    # Call the processing method for each directory in the list
+                    success = downloader.process_specific_folder_and_archive(
+                        dropbox_folder_path=target_path,
+                        delay_between_files=DELAY_BETWEEN_FILES
+                    )
+
+                    if success:
+                        logger.info(f"--- ✅ Task {i}/{len(target_directories)} for '{target_path}' completed successfully. ---")
+                    else:
+                        logger.warning(f"--- ❌ Task {i}/{len(target_directories)} for '{target_path}' failed or was interrupted. Continuing to next task. ---")
         else:
+            # Fallback to normal, directory-structure sync mode if -d is not provided
             logger.info(f"🔄 NORMAL MODE: Running sync by directory structure from '{DROPBOX_FOLDER or 'Dropbox Root'}'")
             downloader.sync_by_directory_structure(
                 root_dropbox_path=DROPBOX_FOLDER,
                 delay_between_files=DELAY_BETWEEN_FILES
             )
+        # --- END OF MODIFICATION ---
         
-        logger.info("\n🎉 Task finished (or paused/interrupted).")
+        logger.info("\n🎉 All tasks finished (or paused/interrupted).")
         downloader._print_stats()
         downloader.show_status()
         
@@ -597,3 +620,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
