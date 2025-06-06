@@ -261,41 +261,62 @@ class DropboxBatchDownloader:
         self.logger.info(f"Cleanup: {cleared_count} files, freed {self._format_size(cleared_size)}.")
         self.stats['transferred_in_run'] += cleared_count
 
-
     def _get_safe_local_path(self, dropbox_path_str: str) -> Path:
         """
-        Constructs a local path from a Dropbox path, shortening the filename if it's too long
-        to prevent 'File name too long' errors on the local filesystem.
+        Constructs a local path from a Dropbox path, shortening ANY component (directory or filename)
+        that is too long to prevent 'File name too long' errors on the local filesystem.
         """
-        # A safe character limit for the filename component. Most filesystems support up to 255 bytes,
-        # but individual components can have shorter limits (e.g., eCryptfs). 120 chars is very safe.
-        MAX_FILENAME_CHARS = 120 
+        # A very safe character limit for any single path component (directory or file).
+        # Most filesystems' limits are on bytes (e.g., 255), but some (like eCryptfs)
+        # have much lower limits. 120 characters is a very conservative and safe choice.
+        MAX_COMPONENT_CHARS = 80
         
-        path_obj = Path(dropbox_path_str.lstrip('/'))
-        parent_dir = path_obj.parent
-        original_filename = path_obj.name
+        # Start with the base download directory (e.g., './downloads')
+        safe_path = self.local_download_dir
         
-        if len(original_filename) > MAX_FILENAME_CHARS:
-            filename_stem = path_obj.stem
-            filename_ext = path_obj.suffix
+        # Process each part of the relative Dropbox path.
+        # e.g., "/batch_2b/00500/long_name.pdf" becomes ["batch_2b", "00500", "long_name.pdf"]
+        path_parts = dropbox_path_str.lstrip('/').split('/')
+        
+        for i, part in enumerate(path_parts):
+            original_component = part
+            shortened_component = original_component
             
-            # Create a short, unique hash from the full path to avoid collisions with other shortened files.
-            path_hash = hashlib.sha1(dropbox_path_str.encode('utf-8')).hexdigest()[:8] # 8-char hash
+            # Check if the length of this part (whether a dir or file) is too long
+            if len(original_component) > MAX_COMPONENT_CHARS:
+                # This component is too long, so we must shorten it.
+                is_filename = (i == len(path_parts) - 1)
+                
+                # Use a hash of the original full Dropbox path to ensure uniqueness
+                # when we truncate names. An 8-char hash is sufficient for this purpose.
+                path_hash = hashlib.sha1(dropbox_path_str.encode('utf-8')).hexdigest()[:8]
+
+                if is_filename:
+                    # If it's the filename, we need to preserve its extension.
+                    path_obj = Path(original_component)
+                    stem = path_obj.stem
+                    ext = path_obj.suffix
+                    
+                    # Calculate available length for the truncated name stem
+                    available_len = MAX_COMPONENT_CHARS - len(ext) - len(path_hash) - 1 # -1 for '_'
+                    shortened_stem = stem[:available_len]
+                    
+                    shortened_component = f"{shortened_stem}_{path_hash}{ext}"
+                else:
+                    # If it's a directory name, we just truncate it and add the hash.
+                    available_len = MAX_COMPONENT_CHARS - len(path_hash) - 1 # -1 for '_'
+                    shortened_dir_name = original_component[:available_len]
+                    
+                    shortened_component = f"{shortened_dir_name}_{path_hash}"
+                
+                self.logger.warning(f"Path component is too long, shortening for local storage. "
+                                  f"Original: '{original_component}', New: '{shortened_component}'")
             
-            # Truncate the stem, leaving space for the hash, an underscore, and the extension.
-            # Example: very_long_name..._a1b2c3d4.pdf
-            available_len_for_stem = MAX_FILENAME_CHARS - len(filename_ext) - len(path_hash) - 1 # -1 for '_'
-            shortened_stem = filename_stem[:available_len_for_stem]
+            # Append the (potentially shortened) component to our safe local path
+            safe_path = safe_path / shortened_component
             
-            new_filename = f"{shortened_stem}_{path_hash}{filename_ext}"
-            
-            self.logger.warning(f"Filename too long, shortening for local storage. "
-                              f"Original: '{original_filename}', New: '{new_filename}', Dropbox Path: {dropbox_path_str}")
-            
-            return self.local_download_dir / parent_dir / new_filename
-        else:
-            # Filename is not too long, return the standard local path.
-            return self.local_download_dir / path_obj
+        return safe_path
+
 
     def _cleanup_empty_dirs(self, directory: Path):
         if not directory.is_dir(): return
